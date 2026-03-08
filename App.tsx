@@ -699,7 +699,7 @@ setShowEstimation(false);
           {netRole !== NetworkRole.None && (
             <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200">
               <div className="flex items-center gap-2 mb-2">
-                <Wifi size={16} className={
+                <Wifi size={20} className={
                   connStatus === 'CONNECTED' ? 'text-green-600' :
                     connStatus === 'WAITING' ? 'text-amber-600' : 'text-red-600'
                 } />
@@ -714,7 +714,7 @@ setShowEstimation(false);
                   connStatus === 'WAITING' ? '等待对手' : '断开连接'}
               </div>
               {roomId && (
-                <div className="mt-2 text-base text-stone-500 text-center flex items-center justify-center gap-1">
+                <div className="mt-2 text-lg text-stone-500 text-center flex items-center justify-center gap-1">
                    <span className="font-mono font-bold">{roomId}</span>
                   <button
                     onClick={() => copyRoomId(roomId)}
@@ -750,7 +750,7 @@ setShowEstimation(false);
               onClick={() => setShowNetPanel(!showNetPanel)}
               className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-lg border border-stone-200 hover:bg-stone-100 transition-colors"
             >
-              <Wifi size={18} />
+              <Wifi size={20} />
               <span className="text-sm font-medium">联机对战</span>
             </button>
           )}
@@ -830,12 +830,12 @@ setShowEstimation(false);
               >
                 {myMoveCommitted && !opponentCommitted ? (
                   <>
-                    <X size={18} strokeWidth={3} />
+                    <X size={20} strokeWidth={3} />
                     撤销
                   </>
                 ) : (
                   <>
-                    <Check size={18} strokeWidth={3} />
+                    <Check size={20} strokeWidth={3} />
                     确认落子
                   </>
                 )}
@@ -863,7 +863,7 @@ setShowEstimation(false);
                   onClick={toggleEstimation}
                   className="flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
                 >
-                  <ChartBar size={18} />
+                  <ChartBar size={20} />
                   形势判断
                 </button>
               )}
@@ -899,7 +899,7 @@ setShowEstimation(false);
                   onClick={endGame}
                   className="flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
                 >
-                  <Flag size={18} />
+                  <Flag size={20} />
                   结束对局
                 </button>
               )}
@@ -909,11 +909,11 @@ setShowEstimation(false);
                   onClick={saveGame}
                   className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
                 >
-                  <Download size={14} />
+                  <Download size={20} />
                   保存
                 </button>
                 <label className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 cursor-pointer">
-                  <Upload size={14} />
+                  <Upload size={20} />
                   加载
                   <input type="file" accept=".json" onChange={loadGame} className="hidden" />
                 </label>

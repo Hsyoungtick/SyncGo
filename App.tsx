@@ -29,7 +29,6 @@ const App: React.FC = () => {
   const [estimatedScore, setEstimatedScore] = useState<{ black: number, white: number } | null>(null);
 
   // --- Network State ---
-  const [showNetPanel, setShowNetPanel] = useState(false);
   const [netRole, setNetRole] = useState<NetworkRole>(NetworkRole.None);
   const [roomId, setRoomId] = useState<string>('');
   const [connStatus, setConnStatus] = useState<'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'WAITING'>('DISCONNECTED');
@@ -76,14 +75,14 @@ const App: React.FC = () => {
     const path = window.location.pathname;
     const roomIdFromPath = path.slice(1).toUpperCase();
 
-    if (roomIdFromPath && roomIdFromPath.length >= 4 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
+    if (roomIdFromPath && roomIdFromPath.length === 6 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
       setJoinInputId(roomIdFromPath);
     }
   }, []);
 
   // --- Auto Join from URL ---
   useEffect(() => {
-    if (joinInputId && joinInputId.length >= 4 && /^[A-Z0-9]+$/.test(joinInputId) && netRole === NetworkRole.None && connStatus === 'DISCONNECTED') {
+    if (joinInputId && joinInputId.length === 6 && /^[A-Z0-9]+$/.test(joinInputId) && netRole === NetworkRole.None && connStatus === 'DISCONNECTED') {
       const socket = connectSocket();
       setConnStatus('CONNECTING');
 
@@ -91,6 +90,7 @@ const App: React.FC = () => {
         if (response.error) {
           console.log('[Socket] 自动加入房间失败:', response.error);
           setConnStatus('DISCONNECTED');
+          setJoinInputId('');
           window.history.pushState({}, '', '/');
           return;
         }
@@ -248,40 +248,11 @@ const App: React.FC = () => {
       setRoomId(response.roomId);
       setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
       setConnStatus('WAITING');
-      setShowNetPanel(false);
       copyRoomId(response.roomId);
 
       window.history.pushState({}, '', `/${response.roomId}`);
     });
   }, [connectSocket]);
-
-  const joinRoom = useCallback(() => {
-    if (!joinInputId) return;
-
-    const socket = connectSocket();
-    setConnStatus('CONNECTING');
-
-    socket.emit('join-room', joinInputId, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean; hasOpponent?: boolean }) => {
-      if (response.error) {
-        console.log('[Socket] 加入房间失败:', response.error);
-        setConnStatus('DISCONNECTED');
-        setShowNetPanel(false);
-        window.history.pushState({}, '', '/');
-        return;
-      }
-      console.log('[Socket] 加入房间成功', response);
-      setRoomId(response.roomId!);
-      setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
-      setConnStatus(response.reconnected || response.hasOpponent ? 'CONNECTED' : 'WAITING');
-      setShowNetPanel(false);
-
-      window.history.pushState({}, '', `/${response.roomId}`);
-
-      if (response.reconnected) {
-        socket.emit('request-sync');
-      }
-    });
-  }, [joinInputId, connectSocket]);
 
   const performResolution = useCallback((blackMove: Point | null, whiteMove: Point | null) => {
     setPhase(GamePhase.Resolution);
@@ -610,69 +581,13 @@ setShowEstimation(false);
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 font-sans flex flex-col">
 
-      {/* Network Panel Modal/Overlay */}
-      {showNetPanel && netRole === NetworkRole.None && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-20 px-4 pointer-events-none">
-          <div className="bg-white shadow-2xl rounded-xl border border-stone-200 p-6 w-full max-w-md pointer-events-auto animate-in fade-in slide-in-from-top-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                <Wifi size={20} className="text-blue-600" /> 联机对战
-              </h3>
-              <button onClick={() => setShowNetPanel(false)} className="text-stone-400 hover:text-stone-800"><X size={20} /></button>
-            </div>
-
-            {netRole === NetworkRole.None && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-2">
-                    <button
-                      onClick={() => createRoom('black')}
-                      className={`flex-1 flex flex-col items-center justify-center gap-2 p-4 border-2 rounded-lg transition-colors border-stone-200 hover:border-stone-400 hover:bg-stone-50`}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-stone-900"></div>
-                      <span className="font-semibold">创建房间（执黑）</span>
-                    </button>
-                    <button
-                      onClick={() => createRoom('white')}
-                      className={`flex-1 flex flex-col items-center justify-center gap-2 p-4 border-2 rounded-lg transition-colors border-stone-200 hover:border-stone-400 hover:bg-stone-50`}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-white border-2 border-stone-300"></div>
-                      <span className="font-semibold">创建房间（执白）</span>
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <input
-                      type="text"
-                      value={joinInputId}
-                      onChange={(e) => setJoinInputId(e.target.value.toUpperCase())}
-                      placeholder="输入房间号"
-                      className="flex-1 p-4 border-2 border-stone-200 rounded-lg text-center uppercase tracking-wider font-mono hover:border-stone-400 focus:outline-none focus:border-stone-400"
-                      maxLength={6}
-                    />
-                    <button
-                      onClick={joinRoom}
-                      disabled={!joinInputId}
-                      className="flex-1 flex items-center justify-center gap-2 p-4 border-2 border-stone-200 rounded-lg hover:border-stone-400 hover:bg-stone-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <div className="w-5 h-5 rounded-full bg-stone-900"></div>
-                      <div className="w-5 h-5 rounded-full bg-white border-2 border-stone-300"></div>
-                      <span className="font-semibold">加入房间</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Main Game Area */}
-      <main className="flex-1 flex items-center justify-center gap-4 p-4">
-
-        {/* Left Panel - Info & Network */}
-        <div className="hidden md:flex flex-col gap-3 w-48 shrink-0">
+      <main className="flex-1 flex items-center justify-center p-4">
+        <div className="flex items-center justify-center gap-4 w-full max-w-[1200px]">
+          {/* Left Panel - Info & Network */}
+          <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-end">
           {/* Game Info */}
-          <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200">
+          <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-stone-900"></div>
@@ -688,18 +603,18 @@ setShowEstimation(false);
               <span className="text-lg font-bold">{captures.white}</span>
             </div>
             <div className="border-t border-stone-200 pt-3 mt-3">
-              <div className="text-center">
+              <div className="flex justify-between items-center">
                 <span className="text-sm text-stone-500">回合</span>
-                <span className="text-lg font-bold ml-2">{turnCount}</span>
+                <span className="text-lg font-bold">{turnCount}</span>
               </div>
             </div>
           </div>
 
           {/* Network Status */}
           {netRole !== NetworkRole.None && (
-            <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200">
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
               <div className="flex items-center gap-2 mb-2">
-                <Wifi size={20} className={
+                <Wifi size={18} className={
                   connStatus === 'CONNECTED' ? 'text-green-600' :
                     connStatus === 'WAITING' ? 'text-amber-600' : 'text-red-600'
                 } />
@@ -721,7 +636,7 @@ setShowEstimation(false);
                     className="p-1 hover:bg-stone-200 rounded transition-colors"
                     title="复制房间号"
                   >
-                    <Copy size={20} />
+                    <Copy size={18} />
                   </button>
                 </div>
               )}
@@ -744,35 +659,45 @@ setShowEstimation(false);
             </div>
           )}
 
-          {/* Network Button - only show when not in a room */}
+          {/* Network Panel - only show when not in a room */}
           {netRole === NetworkRole.None && (
-            <button
-              onClick={() => setShowNetPanel(!showNetPanel)}
-              className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-lg border border-stone-200 hover:bg-stone-100 transition-colors"
-            >
-              <Wifi size={20} />
-              <span className="text-sm font-medium">联机对战</span>
-            </button>
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+              <div className="flex items-center gap-2 mb-3">
+                <Wifi size={18} className="text-blue-600" />
+                <span className="text-sm font-medium">创建房间</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => createRoom('black')}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                  >
+                    <div className="w-4 h-4 rounded-full bg-stone-900"></div>
+                    <span className="text-sm">执黑</span>
+                  </button>
+                  <button
+                    onClick={() => createRoom('white')}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                  >
+                    <div className="w-4 h-4 rounded-full bg-white border-2 border-stone-300"></div>
+                    <span className="text-sm">执白</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={joinInputId}
+                  onChange={(e) => setJoinInputId(e.target.value.toUpperCase())}
+                  placeholder="输入房间号加入"
+                  className="w-full px-3 py-2 border border-stone-200 rounded-lg text-center uppercase tracking-wider font-mono text-sm hover:border-stone-400 focus:outline-none focus:border-stone-400"
+                  maxLength={6}
+                />
+              </div>
+            </div>
           )}
         </div>
 
         {/* Center - Board */}
         <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
-          {/* Status Bar */}
-          <div className="w-full max-w-lg text-center">
-            <div className={`inline-flex items-center justify-center gap-2 px-6 py-2 rounded-full font-semibold shadow-sm transition-colors duration-300
-              ${opponentDisconnected ? 'bg-red-100 text-red-900' : ''}
-              ${phase === GamePhase.Resolution ? 'bg-blue-100 text-blue-900' : ''}
-              ${netRole === NetworkRole.None && phase === GamePhase.Intermission ? 'bg-amber-100 text-amber-900' : ''}
-              ${!opponentDisconnected && !((netRole === NetworkRole.None && phase === GamePhase.Intermission) || phase === GamePhase.Resolution) ? 'bg-stone-800 text-white' : ''}
-            `}>
-              {opponentDisconnected && <WifiOff size={18} />}
-              {phase === GamePhase.Intermission && <EyeOff size={18} />}
-              {phase === GamePhase.Resolution && <RotateCcw size={18} className="animate-spin" />}
-              {getPhaseMessage()}
-            </div>
-          </div>
-
           {/* Board Area */}
           {(netRole === NetworkRole.None && phase === GamePhase.Intermission) ? (
             <div className="w-full aspect-square max-w-[600px] bg-stone-200 rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed border-stone-300 p-8 text-center">
@@ -785,7 +710,7 @@ setShowEstimation(false);
                 onClick={proceedFromIntermission}
                 className="flex items-center justify-center gap-2 px-8 py-3 bg-white text-stone-800 rounded-xl hover:bg-stone-100 transition-colors font-semibold shadow-lg border border-stone-200"
               >
-                <Play size={20} fill="currentColor" />
+                <Play size={18} fill="currentColor" />
                 我是白方玩家
               </button>
             </div>
@@ -813,15 +738,28 @@ setShowEstimation(false);
         </div>
         
         {/* Right Panel - Status & Controls (Desktop only) */}
-        <div className="hidden md:flex flex-col gap-3 w-48 shrink-0">
+        <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-start">
+          {/* Status Bar */}
+          <div className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300
+            ${opponentDisconnected ? 'bg-red-100 text-red-900' : ''}
+            ${phase === GamePhase.Resolution ? 'bg-blue-100 text-blue-900' : ''}
+            ${netRole === NetworkRole.None && phase === GamePhase.Intermission ? 'bg-amber-100 text-amber-900' : ''}
+            ${!opponentDisconnected && !((netRole === NetworkRole.None && phase === GamePhase.Intermission) || phase === GamePhase.Resolution) ? 'bg-stone-800 text-white' : ''}
+          `}>
+            {opponentDisconnected && <WifiOff size={18} />}
+            {phase === GamePhase.Intermission && <EyeOff size={18} />}
+            {phase === GamePhase.Resolution && <RotateCcw size={18} className="animate-spin" />}
+            {getPhaseMessage()}
+          </div>
+
           {/* Desktop Action Controls */}
           {(phase !== GamePhase.Intermission && phase !== GamePhase.Resolution && phase !== GamePhase.GameOver) && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 w-full">
               <button
                 onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
                 disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                 className={`
-                  flex items-center justify-center gap-2 p-3 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                  w-full flex items-center justify-center gap-2 p-3 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
                   ${myMoveCommitted && !opponentCommitted
                     ? 'bg-amber-500 text-white hover:bg-amber-600'
                     : 'bg-white text-stone-800 hover:bg-stone-100 border border-stone-200'
@@ -830,12 +768,12 @@ setShowEstimation(false);
               >
                 {myMoveCommitted && !opponentCommitted ? (
                   <>
-                    <X size={20} strokeWidth={3} />
+                    <X size={18} strokeWidth={3} />
                     撤销
                   </>
                 ) : (
                   <>
-                    <Check size={20} strokeWidth={3} />
+                    <Check size={18} strokeWidth={3} />
                     确认落子
                   </>
                 )}
@@ -844,7 +782,7 @@ setShowEstimation(false);
               {showEstimation && estimatedScore ? (
                 <button
                   onClick={toggleEstimation}
-                  className="flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
@@ -861,15 +799,15 @@ setShowEstimation(false);
               ) : (
                 <button
                   onClick={toggleEstimation}
-                  className="flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
                 >
-                  <ChartBar size={20} />
+                  <ChartBar size={18} />
                   形势判断
                 </button>
               )}
 
               {opponentEndGameRequested ? (
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full">
                   <button
                     onClick={() => socketRef.current?.emit('agree-end-game')}
                     className="flex-1 p-3 bg-white text-green-700 rounded-xl font-medium shadow-md hover:bg-green-50 border border-stone-200"
@@ -889,7 +827,7 @@ setShowEstimation(false);
                     setEndGameRequested(false);
                     socketRef.current?.emit('cancel-end-game');
                   }}
-                  className="flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
                 >
                   <XCircle size={18} />
                   取消请求
@@ -897,23 +835,23 @@ setShowEstimation(false);
               ) : (
                 <button
                   onClick={endGame}
-                  className="flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
                 >
-                  <Flag size={20} />
+                  <Flag size={18} />
                   结束对局
                 </button>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full">
                 <button
                   onClick={saveGame}
                   className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
                 >
-                  <Download size={20} />
+                  <Download size={18} />
                   保存
                 </button>
                 <label className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 cursor-pointer">
-                  <Upload size={20} />
+                  <Upload size={18} />
                   加载
                   <input type="file" accept=".json" onChange={loadGame} className="hidden" />
                 </label>
@@ -922,7 +860,7 @@ setShowEstimation(false);
           )}
           
           {phase === GamePhase.GameOver && (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 w-full">
               <div className="bg-white shadow-md rounded-xl p-4 border border-stone-200">
                 <div className="text-center mb-3">
                   <span className="text-sm text-stone-500 font-medium">游戏结束</span>
@@ -942,13 +880,13 @@ setShowEstimation(false);
               
               <button
                 onClick={resetGameLocal}
-                className="flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
               >
                 <RotateCcw size={18} />
                 再来一局
               </button>
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full">
                 <button
                   onClick={saveGame}
                   className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
@@ -965,14 +903,16 @@ setShowEstimation(false);
             </div>
           )}
           
+        </div>
+        </div>
+        
         {territoryMap && showEstimation && phase !== GamePhase.GameOver && (
           <div className="hidden">
           </div>
         )}
-      </div>
-    </main>
-  </div>
-);
-};
+      </main>
+    </div>
+  );
+  };
 
 export default App;

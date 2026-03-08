@@ -5,7 +5,7 @@ import Goban from './components/Goban';
 import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_SERVER = 'http://localhost:3001';
+const SOCKET_SERVER = `http://${window.location.hostname}:3001`;
 
 const App: React.FC = () => {
   // Game State
@@ -143,6 +143,7 @@ const App: React.FC = () => {
       setNetRole(NetworkRole.Host);
       setConnStatus('WAITING');
       setShowNetPanel(false);
+      copyRoomId(response.roomId);
     });
   }, [connectSocket]);
 
@@ -396,22 +397,20 @@ const App: React.FC = () => {
     setEstimatedScore(null);
   };
 
-  const copyRoomId = async () => {
+  const copyRoomId = async (id: string) => {
     try {
-      await navigator.clipboard.writeText(roomId);
+      await navigator.clipboard.writeText(id);
     } catch (err) {
-      // Fallback for older browsers or non-HTTPS
       const textArea = document.createElement('textarea');
-      textArea.value = roomId;
+      textArea.value = id;
       textArea.style.position = 'fixed';
       textArea.style.left = '-9999px';
       document.body.appendChild(textArea);
       textArea.select();
       try {
         document.execCommand('copy');
-        alert('房间号已复制: ' + roomId);
       } catch (e) {
-        alert('复制失败，请手动复制: ' + roomId);
+        alert('复制失败，请手动复制: ' + id);
       }
       document.body.removeChild(textArea);
     }

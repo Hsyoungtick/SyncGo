@@ -667,9 +667,6 @@ const App: React.FC = () => {
                             {connStatus === 'WAITING' && (
                                 <p className="text-amber-600">等待对手加入...</p>
                             )}
-                            {connStatus === 'CONNECTED' && (
-                                <p className="text-green-600">对手已连接，开始游戏！</p>
-                            )}
                         </div>
                         <button 
                             onClick={() => {
@@ -679,9 +676,9 @@ const App: React.FC = () => {
                               setConnStatus('DISCONNECTED');
                               resetGameLocal();
                             }}
-                            className="w-full py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm"
+                            className="w-full py-2 text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors text-sm"
                         >
-                            断开连接
+                            退出房间
                         </button>
                     </div>
                   )}

@@ -508,14 +508,14 @@ const App: React.FC = () => {
       if (myMoveCommitted && opponentCommitted) return "正在结算...";
       if (myMoveCommitted) return "已确认，等待对方...";
       if (opponentCommitted) return "对方已确认，请落子";
-      if (netRole === NetworkRole.Host) return "主机（黑方）回合：请落子";
-      if (netRole === NetworkRole.Client) return "客机（白方）回合：请落子";
+      if (netRole === NetworkRole.Host) return "黑方请落子";
+      if (netRole === NetworkRole.Client) return "白方请落子";
     }
 
     switch (phase) {
-      case GamePhase.BlackInput: return "黑方回合：请选择落子位置（隐藏）";
+      case GamePhase.BlackInput: return "黑方请落子";
       case GamePhase.Intermission: return "请将设备移交给白方玩家";
-      case GamePhase.WhiteInput: return "白方回合：请选择落子位置（隐藏）";
+      case GamePhase.WhiteInput: return "白方请落子";
       case GamePhase.Resolution: return "正在结算双方走子...";
       case GamePhase.GameOver: return "游戏结束";
       default: return "";
@@ -728,6 +728,7 @@ const App: React.FC = () => {
                     isInteractive={isInteractive()}
                     currentPlayer={getDisplayPlayer()}
                     territoryMap={territoryMap}
+                    lastMove={history.length > 0 ? history[history.length - 1] : null}
                 />
                 
                 {myMoveCommitted && netRole !== NetworkRole.None && phase !== GamePhase.Resolution && (
@@ -778,7 +779,7 @@ const App: React.FC = () => {
                         onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
                         disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                         className={`
-                            flex-1 flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold text-lg shadow-lg transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+                            flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-lg shadow-lg transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
                             ${myMoveCommitted && !opponentCommitted 
                                 ? 'bg-amber-500 text-white hover:bg-amber-600' 
                                 : getDisplayPlayer() === Player.Black 
@@ -795,7 +796,7 @@ const App: React.FC = () => {
                         ) : (
                             <>
                                 <Check size={20} strokeWidth={3} />
-                                确认{getDisplayPlayer() === Player.Black ? "黑方" : "白方"}
+                                确认
                             </>
                         )}
                     </button>

@@ -9,9 +9,10 @@ interface GobanProps {
   isInteractive: boolean;
   currentPlayer: Player;
   territoryMap?: TerritoryMap | null;
+  lastMove?: { black: Point | null; white: Point | null } | null;
 }
 
-const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInteractive, currentPlayer, territoryMap }) => {
+const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInteractive, currentPlayer, territoryMap, lastMove }) => {
   
   const gridLines = useMemo(() => {
     const lines = [];
@@ -95,6 +96,8 @@ const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInterac
                     const isBlack = cell === Player.Black;
                     const isWhite = cell === Player.White;
                     const isTemp = tempMarker?.row === r && tempMarker?.col === c;
+                    const isLastBlack = lastMove?.black?.row === r && lastMove?.black?.col === c;
+                    const isLastWhite = lastMove?.white?.row === r && lastMove?.white?.col === c;
                     
                     const territoryVal = territoryMap ? territoryMap[r][c] : 0;
                     const absVal = Math.abs(territoryVal);
@@ -136,10 +139,22 @@ const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInterac
                             )}
 
                             {isBlack && (
-                                <div className="w-[90%] h-[90%] rounded-full bg-black shadow-[2px_2px_4px_rgba(0,0,0,0.5)] bg-[radial-gradient(circle_at_30%_30%,#555,#000)]" />
+                                <div className="w-[90%] h-[90%] rounded-full bg-black shadow-[2px_2px_4px_rgba(0,0,0,0.5)] bg-[radial-gradient(circle_at_30%_30%,#555,#000)] relative">
+                                    {isLastBlack && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="w-[30%] h-[30%] rounded-full bg-white/80" />
+                                        </div>
+                                    )}
+                                </div>
                             )}
                             {isWhite && (
-                                <div className="w-[90%] h-[90%] rounded-full bg-white shadow-[2px_2px_4px_rgba(0,0,0,0.4)] bg-[radial-gradient(circle_at_30%_30%,#fff,#ddd)]" />
+                                <div className="w-[90%] h-[90%] rounded-full bg-white shadow-[2px_2px_4px_rgba(0,0,0,0.4)] bg-[radial-gradient(circle_at_30%_30%,#fff,#ddd)] relative">
+                                    {isLastWhite && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="w-[30%] h-[30%] rounded-full bg-black/70" />
+                                        </div>
+                                    )}
+                                </div>
                             )}
                             
                             {isTemp && !isBlack && !isWhite && (

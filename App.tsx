@@ -689,7 +689,7 @@ setShowEstimation(false);
             </div>
             <div className="border-t border-stone-200 pt-3 mt-3">
               <div className="text-center">
-                <span className="text-xs text-stone-500">回合</span>
+                <span className="text-sm text-stone-500">回合</span>
                 <span className="text-lg font-bold ml-2">{turnCount}</span>
               </div>
             </div>
@@ -714,14 +714,14 @@ setShowEstimation(false);
                   connStatus === 'WAITING' ? '等待对手' : '断开连接'}
               </div>
               {roomId && (
-                <div className="mt-2 text-sm text-stone-500 text-center flex items-center justify-center gap-1">
+                <div className="mt-2 text-base text-stone-500 text-center flex items-center justify-center gap-1">
                    <span className="font-mono font-bold">{roomId}</span>
                   <button
                     onClick={() => copyRoomId(roomId)}
-                    className="p-1 hover:bg-stone-100 rounded transition-colors"
+                    className="p-1 hover:bg-stone-200 rounded transition-colors"
                     title="复制房间号"
                   >
-                    <Copy size={14} />
+                    <Copy size={20} />
                   </button>
                 </div>
               )}

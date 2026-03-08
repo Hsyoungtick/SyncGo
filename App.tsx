@@ -588,8 +588,8 @@ setShowEstimation(false);
 
   const getScoreDiff = (b: number, w: number) => {
     const diff = Math.abs(b - w).toFixed(1);
-    if (b > w) return `黑优 ${diff}`;
-    if (w > b) return `白优 ${diff}`;
+    if (b > w) return `黑胜 ${diff}`;
+    if (w > b) return `白胜 ${diff}`;
     return "平局";
   };
 
@@ -611,17 +611,17 @@ setShowEstimation(false);
     <div className="min-h-screen bg-stone-100 text-stone-900 font-sans flex flex-col">
 
       {/* Network Panel Modal/Overlay */}
-      {showNetPanel && (
+      {showNetPanel && netRole === NetworkRole.None && (
         <div className="fixed inset-0 z-[60] flex items-start justify-center pt-20 px-4 pointer-events-none">
           <div className="bg-white shadow-2xl rounded-xl border border-stone-200 p-6 w-full max-w-md pointer-events-auto animate-in fade-in slide-in-from-top-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <Wifi size={20} className="text-blue-600" /> 联机大厅
+                <Wifi size={20} className="text-blue-600" /> 联机对战
               </h3>
               <button onClick={() => setShowNetPanel(false)} className="text-stone-400 hover:text-stone-800"><X size={20} /></button>
             </div>
 
-            {netRole === NetworkRole.None ? (
+            {netRole === NetworkRole.None && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-2">
@@ -661,43 +661,6 @@ setShowEstimation(false);
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-stone-100 rounded-lg">
-                  <div>
-                    <div className="text-xs text-stone-400">房间号</div>
-                    <div className="font-mono text-lg font-bold tracking-wider">{roomId}</div>
-                  </div>
-                  <button
-                    onClick={() => copyRoomId(roomId)}
-                    className="p-2 hover:bg-stone-200 rounded-lg transition-colors"
-                    title="复制房间号"
-                  >
-                    <Copy size={18} />
-                  </button>
-                </div>
-                <div className="text-center text-sm">
-                  {connStatus === 'WAITING' && (
-                    <p className="text-amber-600">等待对手加入...</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => {
-                    socketRef.current?.disconnect();
-                    setNetRole(NetworkRole.None);
-                    setRoomId('');
-                    setConnStatus('DISCONNECTED');
-                    setJoinInputId('');
-                    setOpponentDisconnected(false);
-                    setReconnectCountdown(60);
-                    resetGameLocal();
-                    window.history.pushState({}, '', '/');
-                  }}
-                  className="w-full py-2 text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors text-sm"
-                >
-                  退出房间
-                </button>
-              </div>
             )}
           </div>
         </div>
@@ -715,19 +678,19 @@ setShowEstimation(false);
                 <div className="w-4 h-4 rounded-full bg-stone-900"></div>
                 <span className="text-sm font-medium">黑方提子</span>
               </div>
-              <span className="text-xl font-bold">{captures.black}</span>
+              <span className="text-lg font-bold">{captures.black}</span>
             </div>
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full bg-white border-2 border-stone-300"></div>
                 <span className="text-sm font-medium">白方提子</span>
               </div>
-              <span className="text-xl font-bold">{captures.white}</span>
+              <span className="text-lg font-bold">{captures.white}</span>
             </div>
             <div className="border-t border-stone-200 pt-3 mt-3">
               <div className="text-center">
                 <span className="text-xs text-stone-500">回合</span>
-                <span className="text-2xl font-bold ml-2">{turnCount}</span>
+                <span className="text-lg font-bold ml-2">{turnCount}</span>
               </div>
             </div>
           </div>
@@ -744,28 +707,53 @@ setShowEstimation(false);
                   {netRole === NetworkRole.Host ? '主机' : '客机'}
                 </span>
               </div>
-              <div className={`text-xs px-2 py-1 rounded text-center ${connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
+              <div className={`text-sm px-2 py-1 rounded text-center ${connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
                   connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                 }`}>
                 {connStatus === 'CONNECTED' ? '已连接' :
                   connStatus === 'WAITING' ? '等待对手' : '断开连接'}
               </div>
               {roomId && (
-                <div className="mt-2 text-xs text-stone-500 text-center">
-                  房间: <span className="font-mono font-bold">{roomId}</span>
+                <div className="mt-2 text-sm text-stone-500 text-center flex items-center justify-center gap-1">
+                   <span className="font-mono font-bold">{roomId}</span>
+                  <button
+                    onClick={() => copyRoomId(roomId)}
+                    className="p-1 hover:bg-stone-100 rounded transition-colors"
+                    title="复制房间号"
+                  >
+                    <Copy size={14} />
+                  </button>
                 </div>
               )}
+              <button
+                onClick={() => {
+                  socketRef.current?.disconnect();
+                  setNetRole(NetworkRole.None);
+                  setRoomId('');
+                  setConnStatus('DISCONNECTED');
+                  setJoinInputId('');
+                  setOpponentDisconnected(false);
+                  setReconnectCountdown(60);
+                  resetGameLocal();
+                  window.history.pushState({}, '', '/');
+                }}
+                className="w-full mt-2 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+              >
+                退出房间
+              </button>
             </div>
           )}
 
-          {/* Network Button */}
-          <button
-            onClick={() => setShowNetPanel(!showNetPanel)}
-            className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-lg border border-stone-200 hover:bg-stone-100 transition-colors"
-          >
-            <Wifi size={18} />
-            <span className="text-sm font-medium">联机对战</span>
-          </button>
+          {/* Network Button - only show when not in a room */}
+          {netRole === NetworkRole.None && (
+            <button
+              onClick={() => setShowNetPanel(!showNetPanel)}
+              className="flex items-center justify-center gap-2 p-3 bg-white rounded-xl shadow-lg border border-stone-200 hover:bg-stone-100 transition-colors"
+            >
+              <Wifi size={18} />
+              <span className="text-sm font-medium">联机对战</span>
+            </button>
+          )}
         </div>
 
         {/* Center - Board */}
@@ -941,12 +929,12 @@ setShowEstimation(false);
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-center flex-1">
-                    <div className="text-2xl font-black text-black">{scores.black.toFixed(1)}</div>
+                    <div className="text-xl font-black text-black">{scores.black.toFixed(1)}</div>
                     <div className="text-xs text-stone-500">黑</div>
                   </div>
                   <div className="text-sm font-semibold text-stone-600">{getScoreDiff(scores.black, scores.white)}</div>
                   <div className="text-center flex-1">
-                    <div className="text-2xl font-black text-stone-800">{scores.white.toFixed(1)}</div>
+                    <div className="text-xl font-black text-stone-800">{scores.white.toFixed(1)}</div>
                     <div className="text-xs text-stone-500">白</div>
                   </div>
                 </div>

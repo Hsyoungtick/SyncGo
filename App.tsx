@@ -36,6 +36,8 @@ const App: React.FC = () => {
   const [joinInputId, setJoinInputId] = useState('');
   const [myMoveCommitted, setMyMoveCommitted] = useState(false);
   const [opponentCommitted, setOpponentCommitted] = useState(false);
+  const [endGameRequested, setEndGameRequested] = useState(false);
+  const [opponentEndGameRequested, setOpponentEndGameRequested] = useState(false);
 
   // Socket ref
   const socketRef = useRef<Socket | null>(null);
@@ -127,6 +129,23 @@ const App: React.FC = () => {
       setNetRole(NetworkRole.None);
       setRoomId('');
       resetGameLocal();
+    });
+
+    socket.on('opponent-requested-end', () => {
+      console.log('[Socket] 对手请求结束游戏');
+      setOpponentEndGameRequested(true);
+    });
+
+    socket.on('end-game-cancelled', () => {
+      console.log('[Socket] 结束游戏请求已取消');
+      setOpponentEndGameRequested(false);
+    });
+
+    socket.on('game-ended', () => {
+      console.log('[Socket] 游戏结束');
+      const {black, white} = calculateTerritory(boardRef.current);
+      setScores({black, white});
+      setPhase(GamePhase.GameOver);
     });
     
     socketRef.current = socket;
@@ -233,6 +252,8 @@ const App: React.FC = () => {
     setEstimatedScore(null);
     setMyMoveCommitted(false);
     setOpponentCommitted(false);
+    setEndGameRequested(false);
+    setOpponentEndGameRequested(false);
   };
 
   const resetGame = () => {
@@ -332,6 +353,14 @@ const App: React.FC = () => {
   }, [phase, netRole, board, turnCount]);
 
   const endGame = () => {
+    if (netRole !== NetworkRole.None) {
+      if (endGameRequested) {
+        return;
+      }
+      setEndGameRequested(true);
+      socketRef.current?.emit('request-end-game');
+      return;
+    }
     const {black, white} = calculateTerritory(board);
     setScores({black, white});
     setPhase(GamePhase.GameOver);
@@ -699,12 +728,39 @@ const App: React.FC = () => {
                     </button>
 
                     <div className="flex-1 flex justify-end">
-                        <button 
-                             onClick={endGame}
-                             className="text-stone-400 hover:text-red-600 transition-colors text-sm font-semibold px-2"
-                        >
-                            结束
-                        </button>
+                        {opponentEndGameRequested ? (
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => socketRef.current?.emit('agree-end-game')}
+                                    className="text-green-600 hover:text-green-700 transition-colors text-sm font-semibold px-2"
+                                >
+                                    同意结束
+                                </button>
+                                <button 
+                                    onClick={() => socketRef.current?.emit('cancel-end-game')}
+                                    className="text-red-400 hover:text-red-600 transition-colors text-sm font-semibold px-2"
+                                >
+                                    拒绝
+                                </button>
+                            </div>
+                        ) : endGameRequested ? (
+                            <button 
+                                onClick={() => {
+                                    setEndGameRequested(false);
+                                    socketRef.current?.emit('cancel-end-game');
+                                }}
+                                className="text-stone-400 hover:text-stone-600 transition-colors text-sm font-semibold px-2"
+                            >
+                                取消请求
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={endGame}
+                                className="text-stone-400 hover:text-red-600 transition-colors text-sm font-semibold px-2"
+                            >
+                                结束
+                            </button>
+                        )}
                     </div>
                 </div>
 

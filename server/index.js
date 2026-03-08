@@ -30,7 +30,8 @@ io.on('connection', (socket) => {
       guest: null,
       gameState: null,
       moves: { black: null, white: null },
-      committed: { black: false, white: false }
+      committed: { black: false, white: false },
+      endGameRequested: null
     });
     socket.join(roomId);
     socket.data.roomId = roomId;
@@ -121,8 +122,45 @@ io.on('connection', (socket) => {
       room.gameState = null;
       room.moves = { black: null, white: null };
       room.committed = { black: false, white: false };
+      room.endGameRequested = null;
       io.to(roomId).emit('game-restarted');
     }
+  });
+
+  socket.on('request-end-game', () => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.endGameRequested = socket.id;
+    socket.to(roomId).emit('opponent-requested-end');
+    console.log(`[结束请求] 房间 ${roomId} 用户 ${socket.id} 请求结束游戏`);
+  });
+
+  socket.on('cancel-end-game', () => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    room.endGameRequested = null;
+    io.to(roomId).emit('end-game-cancelled');
+    console.log(`[结束请求] 房间 ${roomId} 结束游戏请求已取消`);
+  });
+
+  socket.on('agree-end-game', () => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    console.log(`[结束请求] 房间 ${roomId} 双方同意结束游戏`);
+    io.to(roomId).emit('game-ended');
+    room.endGameRequested = null;
   });
 
   socket.on('disconnect', () => {

@@ -24,7 +24,7 @@ const App: React.FC = () => {
   const [scores, setScores] = useState<{ black: number, white: number } | null>(null);
 
   // Estimation State
-  const [estimationMode, setEstimationMode] = useState(false);
+  const [showEstimation, setShowEstimation] = useState(false);
   const [territoryMap, setTerritoryMap] = useState<TerritoryMap | null>(null);
   const [estimatedScore, setEstimatedScore] = useState<{ black: number, white: number } | null>(null);
 
@@ -61,6 +61,15 @@ const App: React.FC = () => {
   useEffect(() => { capturesRef.current = captures; }, [captures]);
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { netRoleRef.current = netRole; }, [netRole]);
+
+  // --- Update estimation when board changes ---
+  useEffect(() => {
+    if (showEstimation) {
+      const { black, white, territoryMap } = calculateTerritory(board);
+      setTerritoryMap(territoryMap);
+      setEstimatedScore({ black, white });
+    }
+  }, [board, showEstimation]);
 
   // --- URL Room Detection & Auto Join ---
   useEffect(() => {
@@ -349,7 +358,7 @@ const App: React.FC = () => {
     setWhiteSelection(null);
     setLastClash(null);
     setScores(null);
-    setEstimationMode(false);
+    setShowEstimation(false);
     setTerritoryMap(null);
     setEstimatedScore(null);
     setMyMoveCommitted(false);
@@ -366,11 +375,6 @@ const App: React.FC = () => {
   };
 
   const handleCellClick = (p: Point) => {
-    if (estimationMode) {
-      toggleEstimation();
-      return;
-    }
-
     if (phase === GamePhase.Resolution || phase === GamePhase.GameOver) return;
     if (netRole !== NetworkRole.None && myMoveCommitted) return;
 
@@ -392,21 +396,19 @@ const App: React.FC = () => {
   };
 
   const toggleEstimation = () => {
-    if (estimationMode) {
-      setEstimationMode(false);
+    if (showEstimation) {
+      setShowEstimation(false);
       setTerritoryMap(null);
       setEstimatedScore(null);
     } else {
       const { black, white, territoryMap } = calculateTerritory(board);
-      setEstimationMode(true);
+      setShowEstimation(true);
       setTerritoryMap(territoryMap);
       setEstimatedScore({ black, white });
     }
   };
 
   const confirmSelection = () => {
-    if (estimationMode) toggleEstimation();
-
     if (netRole !== NetworkRole.None && socketRef.current) {
       setMyMoveCommitted(true);
       const move = netRole === NetworkRole.Host ? blackSelection : whiteSelection;
@@ -536,7 +538,7 @@ const App: React.FC = () => {
     setWhiteSelection(null);
     setLastClash(null);
     setScores(null);
-    setEstimationMode(false);
+setShowEstimation(false);
     setTerritoryMap(null);
     setEstimatedScore(null);
   };
@@ -586,8 +588,8 @@ const App: React.FC = () => {
 
   const getScoreDiff = (b: number, w: number) => {
     const diff = Math.abs(b - w).toFixed(1);
-    if (b > w) return `黑领先 ${diff}`;
-    if (w > b) return `白领先 ${diff}`;
+    if (b > w) return `黑优 ${diff}`;
+    if (w > b) return `白优 ${diff}`;
     return "平局";
   };
 
@@ -851,15 +853,32 @@ const App: React.FC = () => {
                 )}
               </button>
 
-              <button
-                onClick={toggleEstimation}
-                className={`flex items-center justify-center gap-2 p-3 rounded-xl font-medium shadow-md transition-colors
-                  ${estimationMode ? 'bg-stone-200 text-stone-800' : 'bg-white text-stone-700 hover:bg-stone-100 border border-stone-200'}
-                `}
-              >
-                <ChartBar size={18} />
-                形势判断
-              </button>
+              {showEstimation && estimatedScore ? (
+                <button
+                  onClick={toggleEstimation}
+                  className="flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-stone-900 rounded-full"></div>
+                      <span className="font-bold">{estimatedScore.black.toFixed(1)}</span>
+                    </div>
+                    <span className="text-xs text-stone-500">{getScoreDiff(estimatedScore.black, estimatedScore.white)}</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-stone-100 rounded-full border border-stone-300"></div>
+                      <span className="font-bold">{estimatedScore.white.toFixed(1)}</span>
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                <button
+                  onClick={toggleEstimation}
+                  className="flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                >
+                  <ChartBar size={18} />
+                  形势判断
+                </button>
+              )}
 
               {opponentEndGameRequested ? (
                 <div className="flex gap-2">
@@ -958,23 +977,14 @@ const App: React.FC = () => {
             </div>
           )}
           
-          {estimationMode && estimatedScore && phase !== GamePhase.GameOver && (
-            <div className="bg-white shadow-md rounded-xl p-3 flex items-center gap-4 border border-stone-200">
-              <div className="text-center flex-1">
-                <div className="text-lg font-black text-black">{estimatedScore.black.toFixed(1)}</div>
-                <div className="text-xs text-stone-500">黑</div>
-              </div>
-              <div className="text-xs font-semibold text-stone-600">{getScoreDiff(estimatedScore.black, estimatedScore.white)}</div>
-              <div className="text-center flex-1">
-                <div className="text-lg font-black text-stone-800">{estimatedScore.white.toFixed(1)}</div>
-                <div className="text-xs text-stone-500">白</div>
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  );
+        {territoryMap && showEstimation && phase !== GamePhase.GameOver && (
+          <div className="hidden">
+          </div>
+        )}
+      </div>
+    </main>
+  </div>
+);
 };
 
 export default App;

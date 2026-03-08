@@ -70,15 +70,6 @@ export const resolveTurn = (
 } => {
   const nextBoard = currentBoard.map(row => [...row]);
 
-  // Clear forbidden points
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (nextBoard[r][c] === Player.Forbidden) {
-        nextBoard[r][c] = Player.None;
-      }
-    }
-  }
-
   let clashed = false;
   let clashedPoint: Point | null = null;
   let blackCapturesDelta = 0;
@@ -93,6 +84,14 @@ export const resolveTurn = (
           nextBoard[blackMove.row][blackMove.col] = Player.Forbidden;
       }
     } else {
+      // Clear forbidden points only when both players successfully place stones
+      for (let r = 0; r < BOARD_SIZE; r++) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+          if (nextBoard[r][c] === Player.Forbidden) {
+            nextBoard[r][c] = Player.None;
+          }
+        }
+      }
       if (nextBoard[blackMove.row][blackMove.col] === Player.None) nextBoard[blackMove.row][blackMove.col] = Player.Black;
       if (nextBoard[whiteMove.row][whiteMove.col] === Player.None) nextBoard[whiteMove.row][whiteMove.col] = Player.White;
     }

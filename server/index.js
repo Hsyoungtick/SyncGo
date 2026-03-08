@@ -31,7 +31,9 @@ io.on('connection', (socket) => {
       gameState: null,
       moves: { black: null, white: null },
       committed: { black: false, white: false },
-      endGameRequested: null
+      endGameRequested: null,
+      disconnectedPlayer: null,
+      reconnectTimeout: null
     });
     socket.join(roomId);
     socket.data.roomId = roomId;
@@ -46,6 +48,31 @@ io.on('connection', (socket) => {
       callback({ error: '房间不存在' });
       return;
     }
+
+    if (room.disconnectedPlayer) {
+      if (room.disconnectedPlayer.role === 'white' && room.host && !room.guest) {
+        room.guest = socket.id;
+        socket.join(roomId);
+        socket.data.roomId = roomId;
+        socket.data.role = 'white';
+        
+        if (room.reconnectTimeout) {
+          clearTimeout(room.reconnectTimeout);
+          room.reconnectTimeout = null;
+        }
+        room.disconnectedPlayer = null;
+        
+        io.to(room.host).emit('opponent-reconnected');
+        if (room.gameState) {
+          socket.emit('full-sync', room.gameState);
+        }
+        callback({ roomId, role: 'white', reconnected: true });
+        return;
+      }
+      callback({ error: '无法重连到此房间' });
+      return;
+    }
+    
     if (room.guest) {
       callback({ error: '房间已满' });
       return;
@@ -90,6 +117,23 @@ io.on('connection', (socket) => {
       
       room.moves = { black: null, white: null };
       room.committed = { black: false, white: false };
+    }
+  });
+
+  socket.on('cancel-move', () => {
+    const roomId = socket.data.roomId;
+    const role = socket.data.role;
+    
+    if (!roomId || !role) return;
+    
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    if (room.committed[role] && !room.committed[role === 'black' ? 'white' : 'black']) {
+      console.log(`[撤销] 房间 ${roomId} ${role === 'black' ? '黑方' : '白方'} 撤销落子`);
+      room.moves[role] = null;
+      room.committed[role] = false;
+      socket.to(roomId).emit('opponent-cancelled-move', { role });
     }
   });
 
@@ -146,6 +190,13 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomId);
     if (!room) return;
 
+    if (room.endGameRequested === socket.id) {
+      socket.to(roomId).emit('end-game-cancelled');
+    } else {
+      if (room.endGameRequested) {
+        io.to(room.endGameRequested).emit('end-game-rejected');
+      }
+    }
     room.endGameRequested = null;
     io.to(roomId).emit('end-game-cancelled');
     console.log(`[结束请求] 房间 ${roomId} 结束游戏请求已取消`);
@@ -165,21 +216,45 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const roomId = socket.data.roomId;
+    const role = socket.data.role;
     console.log(`[断开] 用户 ${socket.id} 已断开，房间: ${roomId}`);
     
     if (roomId) {
       const room = rooms.get(roomId);
       if (room) {
         const otherPlayer = room.host === socket.id ? room.guest : room.host;
-        if (otherPlayer) {
-          io.to(otherPlayer).emit('opponent-disconnected');
-        }
         
         if (room.host === socket.id) {
+          if (otherPlayer) {
+            io.to(otherPlayer).emit('opponent-disconnected', { canReconnect: false });
+          }
+          if (room.reconnectTimeout) {
+            clearTimeout(room.reconnectTimeout);
+          }
           rooms.delete(roomId);
           console.log(`[房间] 房间 ${roomId} 已删除`);
         } else {
-          room.guest = null;
+          if (room.gameState && otherPlayer) {
+            room.disconnectedPlayer = { id: socket.id, role: 'white' };
+            room.guest = null;
+            
+            io.to(otherPlayer).emit('opponent-disconnected', { canReconnect: true });
+            
+            room.reconnectTimeout = setTimeout(() => {
+              console.log(`[重连超时] 房间 ${roomId} 等待重连超时`);
+              if (room.host) {
+                io.to(room.host).emit('opponent-reconnect-timeout');
+              }
+              rooms.delete(roomId);
+            }, 60000);
+            
+            console.log(`[断开] 房间 ${roomId} 白方断开，等待重连`);
+          } else {
+            room.guest = null;
+            if (otherPlayer) {
+              io.to(otherPlayer).emit('opponent-disconnected', { canReconnect: false });
+            }
+          }
         }
       }
     }

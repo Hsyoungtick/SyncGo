@@ -95,6 +95,11 @@ const App: React.FC = () => {
       console.log('[Socket] 对手已确认落子');
       setOpponentCommitted(true);
     });
+
+    socket.on('opponent-cancelled-move', () => {
+      console.log('[Socket] 对手撤销了落子');
+      setOpponentCommitted(false);
+    });
     
     socket.on('resolve-turn', (data: { blackMove: Point | null; whiteMove: Point | null }) => {
       console.log('[Socket] 收到结算指令', data);
@@ -122,9 +127,27 @@ const App: React.FC = () => {
       resetGameLocal();
     });
     
-    socket.on('opponent-disconnected', () => {
-      console.log('[Socket] 对手已断开');
-      alert('对手已断开连接');
+    socket.on('opponent-disconnected', (data: { canReconnect: boolean }) => {
+      console.log('[Socket] 对手已断开', data);
+      if (data.canReconnect) {
+        alert('对手已断开连接，等待重连中...（60秒）');
+      } else {
+        alert('对手已断开连接');
+        setConnStatus('DISCONNECTED');
+        setNetRole(NetworkRole.None);
+        setRoomId('');
+        resetGameLocal();
+      }
+    });
+
+    socket.on('opponent-reconnected', () => {
+      console.log('[Socket] 对手已重连');
+      alert('对手已重新连接');
+    });
+
+    socket.on('opponent-reconnect-timeout', () => {
+      console.log('[Socket] 等待重连超时');
+      alert('等待重连超时，游戏结束');
       setConnStatus('DISCONNECTED');
       setNetRole(NetworkRole.None);
       setRoomId('');
@@ -139,6 +162,13 @@ const App: React.FC = () => {
     socket.on('end-game-cancelled', () => {
       console.log('[Socket] 结束游戏请求已取消');
       setOpponentEndGameRequested(false);
+      setEndGameRequested(false);
+    });
+
+    socket.on('end-game-rejected', () => {
+      console.log('[Socket] 结束游戏请求被拒绝');
+      alert('对方拒绝了结束游戏请求');
+      setEndGameRequested(false);
     });
 
     socket.on('game-ended', () => {
@@ -172,7 +202,7 @@ const App: React.FC = () => {
     const socket = connectSocket();
     setConnStatus('CONNECTING');
     
-    socket.emit('join-room', joinInputId, (response: { roomId?: string; role?: string; error?: string }) => {
+    socket.emit('join-room', joinInputId, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean }) => {
       if (response.error) {
         alert(response.error);
         setConnStatus('DISCONNECTED');
@@ -184,7 +214,11 @@ const App: React.FC = () => {
       setConnStatus('CONNECTED');
       setShowNetPanel(false);
       
-      socket.emit('request-sync');
+      if (response.reconnected) {
+        alert('重连成功！');
+      } else {
+        socket.emit('request-sync');
+      }
     });
   }, [joinInputId, connectSocket]);
 
@@ -316,6 +350,13 @@ const App: React.FC = () => {
       setPhase(GamePhase.Intermission);
     } else if (phase === GamePhase.WhiteInput) {
       setPhase(GamePhase.Resolution);
+    }
+  };
+
+  const cancelMove = () => {
+    if (netRole !== NetworkRole.None && socketRef.current && myMoveCommitted && !opponentCommitted) {
+      setMyMoveCommitted(false);
+      socketRef.current.emit('cancel-move');
     }
   };
 
@@ -591,7 +632,7 @@ const App: React.FC = () => {
                                 <div className="font-mono text-lg font-bold tracking-wider">{roomId}</div>
                             </div>
                             <button 
-                                onClick={copyRoomId}
+                                onClick={() => copyRoomId(roomId)}
                                 className="p-2 hover:bg-stone-200 rounded-lg transition-colors"
                                 title="复制房间号"
                             >
@@ -713,18 +754,29 @@ const App: React.FC = () => {
                     </div>
                     
                     <button
-                        onClick={confirmSelection}
-                        disabled={!isInteractive()}
+                        onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
+                        disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                         className={`
                             flex-1 flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold text-lg shadow-lg transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
-                            ${getDisplayPlayer() === Player.Black 
-                                ? 'bg-stone-900 text-white hover:bg-stone-800' 
-                                : 'bg-white text-stone-900 border-2 border-stone-200 hover:bg-stone-50'
+                            ${myMoveCommitted && !opponentCommitted 
+                                ? 'bg-amber-500 text-white hover:bg-amber-600' 
+                                : getDisplayPlayer() === Player.Black 
+                                    ? 'bg-stone-900 text-white hover:bg-stone-800' 
+                                    : 'bg-white text-stone-900 border-2 border-stone-200 hover:bg-stone-50'
                             }
                         `}
                     >
-                        <Check size={20} strokeWidth={3} />
-                        确认{getDisplayPlayer() === Player.Black ? "黑方" : "白方"}
+                        {myMoveCommitted && !opponentCommitted ? (
+                            <>
+                                <X size={20} strokeWidth={3} />
+                                撤销
+                            </>
+                        ) : (
+                            <>
+                                <Check size={20} strokeWidth={3} />
+                                确认{getDisplayPlayer() === Player.Black ? "黑方" : "白方"}
+                            </>
+                        )}
                     </button>
 
                     <div className="flex-1 flex justify-end">
@@ -758,7 +810,7 @@ const App: React.FC = () => {
                                 onClick={endGame}
                                 className="text-stone-400 hover:text-red-600 transition-colors text-sm font-semibold px-2"
                             >
-                                结束
+                                结束对局
                             </button>
                         )}
                     </div>
@@ -783,15 +835,6 @@ const App: React.FC = () => {
                         加载
                         <input type="file" accept=".json" onChange={loadGame} className="hidden" />
                     </label>
-                    <span className="text-stone-300">|</span>
-                    <button 
-                        onClick={resetGame}
-                        className="flex items-center gap-1.5 hover:text-red-600 transition-colors px-2 py-1"
-                        title="重新开始"
-                    >
-                        <RotateCcw size={16} />
-                        重置
-                    </button>
                 </div>
                 </>
             )}

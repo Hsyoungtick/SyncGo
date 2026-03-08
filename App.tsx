@@ -549,7 +549,7 @@ setShowEstimation(false);
 
     switch (phase) {
       case GamePhase.BlackInput: return "黑方请落子";
-      case GamePhase.Intermission: return "请将设备移交给白方玩家";
+      case GamePhase.Intermission: return "请将设备移交给白方";
       case GamePhase.WhiteInput: return "白方请落子";
       case GamePhase.Resolution: return "正在结算双方走子...";
       case GamePhase.GameOver: return "游戏结束";
@@ -618,15 +618,12 @@ setShowEstimation(false);
                   connStatus === 'CONNECTED' ? 'text-green-600' :
                     connStatus === 'WAITING' ? 'text-amber-600' : 'text-red-600'
                 } />
-                <span className="text-sm font-medium">
-                  {netRole === NetworkRole.Host ? '主机' : '客机'}
+                <span className={`text-sm px-2 py-0.5 rounded ${connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
+                    connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                  {connStatus === 'CONNECTED' ? '已连接' :
+                    connStatus === 'WAITING' ? '等待对手' : '断开连接'}
                 </span>
-              </div>
-              <div className={`text-sm px-2 py-1 rounded text-center ${connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
-                  connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                }`}>
-                {connStatus === 'CONNECTED' ? '已连接' :
-                  connStatus === 'WAITING' ? '等待对手' : '断开连接'}
               </div>
               {roomId && (
                 <div className="mt-2 text-lg text-stone-500 text-center flex items-center justify-center gap-1">
@@ -759,7 +756,7 @@ setShowEstimation(false);
                 onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
                 disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                 className={`
-                  w-full flex items-center justify-center gap-2 p-3 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                  w-full h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
                   ${myMoveCommitted && !opponentCommitted
                     ? 'bg-amber-500 text-white hover:bg-amber-600'
                     : 'bg-white text-stone-800 hover:bg-stone-100 border border-stone-200'
@@ -782,7 +779,7 @@ setShowEstimation(false);
               {showEstimation && estimatedScore ? (
                 <button
                   onClick={toggleEstimation}
-                  className="w-full flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
@@ -799,7 +796,7 @@ setShowEstimation(false);
               ) : (
                 <button
                   onClick={toggleEstimation}
-                  className="w-full flex items-center justify-center gap-2 h-12 px-4 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
                 >
                   <ChartBar size={18} />
                   形势判断

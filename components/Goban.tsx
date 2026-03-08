@@ -113,11 +113,13 @@ const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInterac
               return (
                 <div
                   key={`${r}-${c}`}
-                  className={`relative flex items-center justify-center cursor-pointer`}
+                  className={`relative flex items-center justify-center ${canClick ? 'cursor-pointer group' : ''}`}
                   onClick={() => canClick && onCellClick({ row: r, col: c })}
                 >
                   {canClick && !isTemp && (
-                    <div className="hidden hover:block w-[40%] h-[40%] rounded-full bg-stone-900/10" />
+                    <div 
+                      className={`w-[90%] h-[90%] rounded-full opacity-0 group-hover:opacity-40 ${currentPlayer === Player.Black ? 'bg-black' : 'bg-white border border-stone-300'}`}
+                    />
                   )}
 
                   {/* Territory Marker */}

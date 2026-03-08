@@ -3,3 +3,8 @@
 body {
   font-family: 'Noto Sans SC', sans-serif;
 }
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}

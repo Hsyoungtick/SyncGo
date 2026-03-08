@@ -396,8 +396,25 @@ const App: React.FC = () => {
     setEstimatedScore(null);
   };
 
-  const copyRoomId = () => {
-    navigator.clipboard.writeText(roomId);
+  const copyRoomId = async () => {
+    try {
+      await navigator.clipboard.writeText(roomId);
+    } catch (err) {
+      // Fallback for older browsers or non-HTTPS
+      const textArea = document.createElement('textarea');
+      textArea.value = roomId;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        alert('房间号已复制: ' + roomId);
+      } catch (e) {
+        alert('复制失败，请手动复制: ' + roomId);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   const getPhaseMessage = () => {

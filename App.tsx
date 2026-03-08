@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [opponentCommitted, setOpponentCommitted] = useState(false);
   const [endGameRequested, setEndGameRequested] = useState(false);
   const [opponentEndGameRequested, setOpponentEndGameRequested] = useState(false);
+  const [selectedCreateRole, setSelectedCreateRole] = useState<'black' | 'white'>('black');
 
   // Socket ref
   const socketRef = useRef<Socket | null>(null);
@@ -58,6 +59,17 @@ const App: React.FC = () => {
   useEffect(() => { capturesRef.current = captures; }, [captures]);
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { netRoleRef.current = netRole; }, [netRole]);
+
+  // --- URL Room Detection ---
+  useEffect(() => {
+    const path = window.location.pathname;
+    const roomIdFromPath = path.slice(1).toUpperCase();
+    
+    if (roomIdFromPath && roomIdFromPath.length >= 6 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
+      setJoinInputId(roomIdFromPath);
+      setShowNetPanel(true);
+    }
+  }, []);
 
   // --- Socket.io Connection ---
   useEffect(() => {
@@ -182,17 +194,19 @@ const App: React.FC = () => {
     return socket;
   }, []);
 
-  const createRoom = useCallback(() => {
+  const createRoom = useCallback((role: 'black' | 'white' = 'black') => {
     const socket = connectSocket();
     setConnStatus('CONNECTING');
     
-    socket.emit('create-room', (response: { roomId: string; role: string }) => {
+    socket.emit('create-room', { role }, (response: { roomId: string; role: string }) => {
       console.log('[Socket] 创建房间成功', response);
       setRoomId(response.roomId);
-      setNetRole(NetworkRole.Host);
+      setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
       setConnStatus('WAITING');
       setShowNetPanel(false);
       copyRoomId(response.roomId);
+      
+      window.history.pushState({}, '', `/${response.roomId}`);
     });
   }, [connectSocket]);
 
@@ -210,9 +224,11 @@ const App: React.FC = () => {
       }
       console.log('[Socket] 加入房间成功', response);
       setRoomId(response.roomId!);
-      setNetRole(NetworkRole.Client);
+      setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
       setConnStatus('CONNECTED');
       setShowNetPanel(false);
+      
+      window.history.pushState({}, '', `/${response.roomId}`);
       
       if (response.reconnected) {
         alert('重连成功！');
@@ -594,16 +610,27 @@ const App: React.FC = () => {
                   
                   {netRole === NetworkRole.None ? (
                     <div className="space-y-4">
-                        <p className="text-sm text-stone-500 mb-2">选择身份以开始联机对战：</p>
                         <div className="grid grid-cols-2 gap-4">
-                            <button 
-                                onClick={createRoom}
-                                className="flex flex-col items-center gap-2 p-4 border-2 border-stone-200 rounded-lg hover:border-stone-400 hover:bg-stone-50 transition-colors"
-                            >
-                                <div className="w-10 h-10 rounded-full bg-stone-900"></div>
-                                <span className="font-semibold">创建房间</span>
-                                <span className="text-xs text-stone-400">执黑先行</span>
-                            </button>
+                            <div className="flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => createRoom('black')}
+                                        className={`flex-1 flex flex-col items-center gap-2 p-4 border-2 rounded-lg transition-colors ${selectedCreateRole === 'black' ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:border-stone-400 hover:bg-stone-50'}`}
+                                    >
+                                        <div className="w-10 h-10 rounded-full bg-stone-900"></div>
+                                        <span className="font-semibold">创建<br></br>房间</span>
+                                        <span className="text-xs text-stone-400">执黑</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => createRoom('white')}
+                                        className={`flex-1 flex flex-col items-center gap-2 p-4 border-2 rounded-lg transition-colors ${selectedCreateRole === 'white' ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:border-stone-400 hover:bg-stone-50'}`}
+                                    >
+                                        <div className="w-10 h-10 rounded-full bg-white border-2 border-stone-300"></div>
+                                        <span className="font-semibold">创建<br></br>房间</span>
+                                        <span className="text-xs text-stone-400">执白</span>
+                                    </button>
+                                </div>
+                            </div>
                             <div className="flex flex-col gap-2">
                                 <input 
                                     type="text" 
@@ -618,7 +645,8 @@ const App: React.FC = () => {
                                     disabled={!joinInputId}
                                     className="flex items-center justify-center gap-2 p-4 border-2 border-stone-200 rounded-lg hover:border-stone-400 hover:bg-stone-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <div className="w-10 h-10 rounded-full bg-white border-2 border-stone-300"></div>
+                                    <div className="w-5 h-5 rounded-full bg-stone-900"></div>
+                                    <div className="w-5 h-5 rounded-full bg-white border-2 border-stone-300"></div>
                                     <span className="font-semibold">加入房间</span>
                                 </button>
                             </div>

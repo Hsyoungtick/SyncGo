@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Player, BoardState, GamePhase, Point, TerritoryMap, MoveRecord, NetworkRole } from './types';
 import { createEmptyBoard, resolveTurn, calculateTerritory } from './utils/gameLogic';
 import Goban from './components/Goban';
-import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle } from 'lucide-react';
+import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_SERVER = `http://${window.location.hostname}:3001`;
@@ -11,7 +11,7 @@ const App: React.FC = () => {
   // Game State
   const [board, setBoard] = useState<BoardState>(createEmptyBoard());
   const [phase, setPhase] = useState<GamePhase>(GamePhase.BlackInput);
-  const [turnCount, setTurnCount] = useState<number>(1);
+  const [turnCount, setTurnCount] = useState<number>(0);
   const [captures, setCaptures] = useState({ black: 0, white: 0 });
   const [history, setHistory] = useState<MoveRecord[]>([]);
 
@@ -39,6 +39,8 @@ const App: React.FC = () => {
   const [endGameRequested, setEndGameRequested] = useState(false);
   const [opponentEndGameRequested, setOpponentEndGameRequested] = useState(false);
   const [selectedCreateRole, setSelectedCreateRole] = useState<'black' | 'white'>('black');
+  const [opponentDisconnected, setOpponentDisconnected] = useState(false);
+  const [reconnectCountdown, setReconnectCountdown] = useState(60);
 
   // Socket ref
   const socketRef = useRef<Socket | null>(null);
@@ -60,16 +62,42 @@ const App: React.FC = () => {
   useEffect(() => { historyRef.current = history; }, [history]);
   useEffect(() => { netRoleRef.current = netRole; }, [netRole]);
 
-  // --- URL Room Detection ---
+  // --- URL Room Detection & Auto Join ---
   useEffect(() => {
     const path = window.location.pathname;
     const roomIdFromPath = path.slice(1).toUpperCase();
 
-    if (roomIdFromPath && roomIdFromPath.length >= 6 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
+    if (roomIdFromPath && roomIdFromPath.length >= 4 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
       setJoinInputId(roomIdFromPath);
-      setShowNetPanel(true);
     }
   }, []);
+
+  // --- Auto Join from URL ---
+  useEffect(() => {
+    if (joinInputId && joinInputId.length >= 4 && /^[A-Z0-9]+$/.test(joinInputId) && netRole === NetworkRole.None && connStatus === 'DISCONNECTED') {
+      const socket = connectSocket();
+      setConnStatus('CONNECTING');
+
+      socket.emit('join-room', joinInputId, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean; hasOpponent?: boolean }) => {
+        if (response.error) {
+          console.log('[Socket] 自动加入房间失败:', response.error);
+          setConnStatus('DISCONNECTED');
+          window.history.pushState({}, '', '/');
+          return;
+        }
+        console.log('[Socket] 自动加入房间成功', response);
+        setRoomId(response.roomId!);
+        setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
+        setConnStatus(response.reconnected || response.hasOpponent ? 'CONNECTED' : 'WAITING');
+
+        window.history.pushState({}, '', `/${response.roomId}`);
+
+        if (response.reconnected) {
+          socket.emit('request-sync');
+        }
+      });
+    }
+  }, [joinInputId, netRole, connStatus]);
 
   // --- Socket.io Connection ---
   useEffect(() => {
@@ -96,6 +124,10 @@ const App: React.FC = () => {
       setConnStatus('DISCONNECTED');
       setNetRole(NetworkRole.None);
       setRoomId('');
+      setJoinInputId('');
+      setOpponentDisconnected(false);
+      setReconnectCountdown(60);
+      window.history.pushState({}, '', '/');
     });
 
     socket.on('player-joined', () => {
@@ -142,9 +174,9 @@ const App: React.FC = () => {
     socket.on('opponent-disconnected', (data: { canReconnect: boolean }) => {
       console.log('[Socket] 对手已断开', data);
       if (data.canReconnect) {
-        alert('对手已断开连接，等待重连中...（60秒）');
+        setOpponentDisconnected(true);
+        setReconnectCountdown(60);
       } else {
-        alert('对手已断开连接');
         setConnStatus('DISCONNECTED');
         setNetRole(NetworkRole.None);
         setRoomId('');
@@ -154,16 +186,19 @@ const App: React.FC = () => {
 
     socket.on('opponent-reconnected', () => {
       console.log('[Socket] 对手已重连');
-      alert('对手已重新连接');
+      setOpponentDisconnected(false);
+      setReconnectCountdown(60);
     });
 
     socket.on('opponent-reconnect-timeout', () => {
       console.log('[Socket] 等待重连超时');
-      alert('等待重连超时，游戏结束');
       setConnStatus('DISCONNECTED');
       setNetRole(NetworkRole.None);
       setRoomId('');
+      setJoinInputId('');
+      setOpponentDisconnected(false);
       resetGameLocal();
+      window.history.pushState({}, '', '/');
     });
 
     socket.on('opponent-requested-end', () => {
@@ -217,23 +252,23 @@ const App: React.FC = () => {
     const socket = connectSocket();
     setConnStatus('CONNECTING');
 
-    socket.emit('join-room', joinInputId, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean }) => {
+    socket.emit('join-room', joinInputId, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean; hasOpponent?: boolean }) => {
       if (response.error) {
-        alert(response.error);
+        console.log('[Socket] 加入房间失败:', response.error);
         setConnStatus('DISCONNECTED');
+        setShowNetPanel(false);
+        window.history.pushState({}, '', '/');
         return;
       }
       console.log('[Socket] 加入房间成功', response);
       setRoomId(response.roomId!);
       setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
-      setConnStatus('CONNECTED');
+      setConnStatus(response.reconnected || response.hasOpponent ? 'CONNECTED' : 'WAITING');
       setShowNetPanel(false);
 
       window.history.pushState({}, '', `/${response.roomId}`);
 
       if (response.reconnected) {
-        alert('重连成功！');
-      } else {
         socket.emit('request-sync');
       }
     });
@@ -285,6 +320,22 @@ const App: React.FC = () => {
       }
     }, 500);
   }, []);
+
+  // --- Reconnect Countdown ---
+  useEffect(() => {
+    if (!opponentDisconnected) return;
+    
+    const timer = setInterval(() => {
+      setReconnectCountdown(prev => {
+        if (prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [opponentDisconnected]);
 
   // --- Game Logic ---
 
@@ -510,6 +561,10 @@ const App: React.FC = () => {
   };
 
   const getPhaseMessage = () => {
+    if (opponentDisconnected) {
+      return `对方掉线...${reconnectCountdown}秒`;
+    }
+    
     if (netRole !== NetworkRole.None) {
       if (phase === GamePhase.GameOver) return "游戏结束";
       if (myMoveCommitted && opponentCommitted) return "正在结算...";
@@ -630,7 +685,11 @@ const App: React.FC = () => {
                     setNetRole(NetworkRole.None);
                     setRoomId('');
                     setConnStatus('DISCONNECTED');
+                    setJoinInputId('');
+                    setOpponentDisconnected(false);
+                    setReconnectCountdown(60);
                     resetGameLocal();
+                    window.history.pushState({}, '', '/');
                   }}
                   className="w-full py-2 text-red-600 bg-red-100 hover:bg-red-200 rounded-lg transition-colors text-sm"
                 >
@@ -712,10 +771,12 @@ const App: React.FC = () => {
           {/* Status Bar */}
           <div className="w-full max-w-lg text-center">
             <div className={`inline-flex items-center justify-center gap-2 px-6 py-2 rounded-full font-semibold shadow-sm transition-colors duration-300
+              ${opponentDisconnected ? 'bg-red-100 text-red-900' : ''}
               ${phase === GamePhase.Resolution ? 'bg-blue-100 text-blue-900' : ''}
               ${netRole === NetworkRole.None && phase === GamePhase.Intermission ? 'bg-amber-100 text-amber-900' : ''}
-              ${!((netRole === NetworkRole.None && phase === GamePhase.Intermission) || phase === GamePhase.Resolution) ? 'bg-stone-800 text-white' : ''}
+              ${!opponentDisconnected && !((netRole === NetworkRole.None && phase === GamePhase.Intermission) || phase === GamePhase.Resolution) ? 'bg-stone-800 text-white' : ''}
             `}>
+              {opponentDisconnected && <WifiOff size={18} />}
               {phase === GamePhase.Intermission && <EyeOff size={18} />}
               {phase === GamePhase.Resolution && <RotateCcw size={18} className="animate-spin" />}
               {getPhaseMessage()}

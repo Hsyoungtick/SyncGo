@@ -83,7 +83,7 @@ io.on('connection', (socket) => {
       }
       
       console.log(`[重连] 用户 ${socket.id} 重连到房间 ${roomId}，角色: ${disconnectedPlayer.role}`);
-      callback({ roomId, role: disconnectedPlayer.role, reconnected: true });
+      callback({ roomId, role: disconnectedPlayer.role, reconnected: true, hasOpponent: !!otherPlayer });
       return;
     }
 
@@ -112,7 +112,7 @@ io.on('connection', (socket) => {
       io.to(otherPlayer).emit('player-joined', { playerId: socket.id, role });
     }
     
-    callback({ roomId, role });
+    callback({ roomId, role, hasOpponent: !!otherPlayer });
   });
 
   socket.on('commit-move', (data) => {

@@ -101,35 +101,101 @@ export const resolveTurn = (
      if (nextBoard[whiteMove.row][whiteMove.col] === Player.None) nextBoard[whiteMove.row][whiteMove.col] = Player.White;
   }
 
-  // 2. Resolve captures
-  const deadGroups: Point[][] = [];
-  const processedStones = new Set<string>();
+  // 2. Find groups with 0 liberties
+  const findDeadGroups = (board: BoardState): { blackGroups: Point[][], whiteGroups: Point[][] } => {
+    const blackGroups: Point[][] = [];
+    const whiteGroups: Point[][] = [];
+    const processedStones = new Set<string>();
 
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      const color = nextBoard[r][c];
-      if (color === Player.Black || color === Player.White) {
-        const key = `${r},${c}`;
-        if (processedStones.has(key)) continue;
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        const color = board[r][c];
+        if (color === Player.Black || color === Player.White) {
+          const key = `${r},${c}`;
+          if (processedStones.has(key)) continue;
 
-        const groupInfo = getGroup(nextBoard, { row: r, col: c });
-        groupInfo.stones.forEach(s => processedStones.add(`${s.row},${s.col}`));
+          const groupInfo = getGroup(board, { row: r, col: c });
+          groupInfo.stones.forEach(s => processedStones.add(`${s.row},${s.col}`));
 
-        if (groupInfo.liberties === 0) deadGroups.push(groupInfo.stones);
+          if (groupInfo.liberties === 0) {
+            if (color === Player.Black) blackGroups.push(groupInfo.stones);
+            else whiteGroups.push(groupInfo.stones);
+          }
+        }
       }
+    }
+    return { blackGroups, whiteGroups };
+  };
+
+  // 3. Check if a move captures opponent stones
+  const checkCaptures = (board: BoardState, move: Point | null, player: Player): Point[][] => {
+    if (!move) return [];
+    const opponent = player === Player.Black ? Player.White : Player.Black;
+    const capturedGroups: Point[][] = [];
+    const processedStones = new Set<string>();
+
+    // Check opponent groups adjacent to the move
+    const neighbors = getNeighbors(move);
+    for (const neighbor of neighbors) {
+      if (board[neighbor.row][neighbor.col] === opponent) {
+        const key = `${neighbor.row},${neighbor.col}`;
+        if (processedStones.has(key)) continue;
+        
+        const groupInfo = getGroup(board, neighbor);
+        groupInfo.stones.forEach(s => processedStones.add(`${s.row},${s.col}`));
+        
+        if (groupInfo.liberties === 0) {
+          capturedGroups.push(groupInfo.stones);
+        }
+      }
+    }
+    return capturedGroups;
+  };
+
+  // 4. Determine what to capture
+  const { blackGroups, whiteGroups } = findDeadGroups(nextBoard);
+  
+  // Check if black captures white
+  const blackCaptures = checkCaptures(nextBoard, blackMove, Player.Black);
+  // Check if white captures black
+  const whiteCaptures = checkCaptures(nextBoard, whiteMove, Player.White);
+
+  // If both players capture each other's stones at the same positions, mark as forbidden
+  if (blackCaptures.length > 0 && whiteCaptures.length > 0) {
+    // Check if they are capturing each other (mutual capture)
+    const blackCaptureSet = new Set(blackCaptures.flat().map(p => `${p.row},${p.col}`));
+    const whiteCaptureSet = new Set(whiteCaptures.flat().map(p => `${p.row},${p.col}`));
+    
+    // Check if the moves themselves would be captured
+    const blackMoveWouldBeCaptured = blackMove && whiteCaptureSet.has(`${blackMove.row},${blackMove.col}`);
+    const whiteMoveWouldBeCaptured = whiteMove && blackCaptureSet.has(`${whiteMove.row},${whiteMove.col}`);
+    
+    if (blackMoveWouldBeCaptured && whiteMoveWouldBeCaptured) {
+      // Mutual capture - mark both positions as forbidden
+      clashed = true;
+      if (blackMove) {
+        nextBoard[blackMove.row][blackMove.col] = Player.Forbidden;
+        clashedPoint = blackMove;
+      }
+      if (whiteMove && (whiteMove.row !== blackMove?.row || whiteMove.col !== blackMove?.col)) {
+        nextBoard[whiteMove.row][whiteMove.col] = Player.Forbidden;
+      }
+      return { newBoard: nextBoard, blackCapturesDelta: 0, whiteCapturesDelta: 0, clashed, clashedPoint };
     }
   }
 
-  deadGroups.forEach(group => {
-    if (group.length > 0) {
-      const first = group[0];
-      const color = nextBoard[first.row][first.col];
-      if (color === Player.Black) whiteCapturesDelta += group.length;
-      else if (color === Player.White) blackCapturesDelta += group.length;
-
-      group.forEach(p => nextBoard[p.row][p.col] = Player.None);
-    }
-  });
+  // 5. Apply captures
+  // Black captures white stones
+  for (const group of blackCaptures) {
+    blackCapturesDelta += group.length;
+    group.forEach(p => nextBoard[p.row][p.col] = Player.None);
+  }
+  
+  // White captures black stones
+  for (const group of whiteCaptures) {
+    whiteCapturesDelta += group.length;
+    group.forEach(p => nextBoard[p.row][p.col] = Player.None);
+  }
 
   return { newBoard: nextBoard, blackCapturesDelta, whiteCapturesDelta, clashed, clashedPoint };
 };

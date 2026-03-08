@@ -1,0 +1,5 @@
+{
+  "name": "同步围棋",
+  "description": "本地双人围棋变体，支持同步落子、自杀规则及禁入点机制。",
+  "requestFramePermissions": []
+}

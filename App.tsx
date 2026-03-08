@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Player, BoardState, GamePhase, Point, TerritoryMap, MoveRecord, NetworkRole } from './types';
 import { createEmptyBoard, resolveTurn, calculateTerritory } from './utils/gameLogic';
 import Goban from './components/Goban';
-import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff } from 'lucide-react';
+import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_SERVER = `http://${window.location.hostname}:3001`;
@@ -40,9 +40,15 @@ const App: React.FC = () => {
   const [selectedCreateRole, setSelectedCreateRole] = useState<'black' | 'white'>('black');
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
   const [reconnectCountdown, setReconnectCountdown] = useState(60);
+  const [quickMode, setQuickMode] = useState(() => localStorage.getItem('quickMode') === 'true');
 
   // Socket ref
   const socketRef = useRef<Socket | null>(null);
+
+  // Save quickMode to localStorage
+  useEffect(() => {
+    localStorage.setItem('quickMode', String(quickMode));
+  }, [quickMode]);
 
   // Refs to access latest state in callbacks
   const movesRef = useRef<{ black: Point | null, white: Point | null }>({ black: null, white: null });
@@ -351,18 +357,44 @@ const App: React.FC = () => {
 
     if (netRole === NetworkRole.None) {
       if (phase === GamePhase.BlackInput) {
-        if (blackSelection?.row === p.row && blackSelection?.col === p.col) setBlackSelection(null);
-        else setBlackSelection(p);
+        if (!quickMode && blackSelection?.row === p.row && blackSelection?.col === p.col) {
+          setBlackSelection(null);
+        } else {
+          setBlackSelection(p);
+          if (quickMode) {
+            setPhase(GamePhase.Intermission);
+          }
+        }
       } else if (phase === GamePhase.WhiteInput) {
-        if (whiteSelection?.row === p.row && whiteSelection?.col === p.col) setWhiteSelection(null);
-        else setWhiteSelection(p);
+        if (!quickMode && whiteSelection?.row === p.row && whiteSelection?.col === p.col) {
+          setWhiteSelection(null);
+        } else {
+          setWhiteSelection(p);
+          if (quickMode) {
+            setPhase(GamePhase.Resolution);
+          }
+        }
       }
     } else if (netRole === NetworkRole.Host) {
-      if (blackSelection?.row === p.row && blackSelection?.col === p.col) setBlackSelection(null);
-      else setBlackSelection(p);
+      if (!quickMode && blackSelection?.row === p.row && blackSelection?.col === p.col) {
+        setBlackSelection(null);
+      } else {
+        setBlackSelection(p);
+        if (quickMode && socketRef.current) {
+          setMyMoveCommitted(true);
+          socketRef.current.emit('commit-move', { move: p });
+        }
+      }
     } else if (netRole === NetworkRole.Client) {
-      if (whiteSelection?.row === p.row && whiteSelection?.col === p.col) setWhiteSelection(null);
-      else setWhiteSelection(p);
+      if (!quickMode && whiteSelection?.row === p.row && whiteSelection?.col === p.col) {
+        setWhiteSelection(null);
+      } else {
+        setWhiteSelection(p);
+        if (quickMode && socketRef.current) {
+          setMyMoveCommitted(true);
+          socketRef.current.emit('commit-move', { move: p });
+        }
+      }
     }
   };
 
@@ -752,29 +784,42 @@ setShowEstimation(false);
           {/* Desktop Action Controls */}
           {(phase !== GamePhase.Intermission && phase !== GamePhase.Resolution && phase !== GamePhase.GameOver) && (
             <div className="flex flex-col gap-2 w-full">
-              <button
-                onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
-                disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
-                className={`
-                  w-full h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
-                  ${myMoveCommitted && !opponentCommitted
-                    ? 'bg-amber-500 text-white hover:bg-amber-600'
-                    : 'bg-white text-stone-800 hover:bg-stone-100 border border-stone-200'
-                  }
-                `}
-              >
-                {myMoveCommitted && !opponentCommitted ? (
-                  <>
-                    <X size={18} strokeWidth={3} />
-                    撤销
-                  </>
-                ) : (
-                  <>
-                    <Check size={18} strokeWidth={3} />
-                    确认落子
-                  </>
-                )}
-              </button>
+              <div className="flex gap-1">
+                <button
+                  onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
+                  disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
+                  className={`
+                    flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                    ${myMoveCommitted && !opponentCommitted
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-white text-stone-800 hover:bg-stone-100 border border-stone-200'
+                    }
+                  `}
+                >
+                  {myMoveCommitted && !opponentCommitted ? (
+                    <>
+                      <X size={18} strokeWidth={3} />
+                      撤销
+                    </>
+                  ) : (
+                    <>
+                      <Check size={18} strokeWidth={3} />
+                      {quickMode ? '直接落子' : '确认落子'}
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setQuickMode(!quickMode)}
+                  className={`h-12 w-12 flex items-center justify-center rounded-xl shadow-md transition-all ${
+                    quickMode 
+                      ? 'bg-stone-800 text-white hover:bg-stone-700'
+                      : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                  }`}
+                  title={quickMode ? '快速模式已开启' : '开启快速模式'}
+                >
+                  <Zap size={18} strokeWidth={quickMode ? 3 : 2} />
+                </button>
+              </div>
 
               {showEstimation && estimatedScore ? (
                 <button

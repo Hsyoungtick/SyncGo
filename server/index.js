@@ -197,7 +197,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('request-end-game', () => {
+  socket.on('request-end-game', (gameState) => {
     const roomId = socket.data.roomId;
     if (!roomId) return;
     
@@ -205,6 +205,7 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     room.endGameRequested = socket.id;
+    room.gameState = gameState;
     socket.to(roomId).emit('opponent-requested-end');
     console.log(`[结束请求] 房间 ${roomId} 用户 ${socket.id} 请求结束游戏`);
   });
@@ -236,7 +237,7 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     console.log(`[结束请求] 房间 ${roomId} 双方同意结束游戏`);
-    io.to(roomId).emit('game-ended');
+    io.to(roomId).emit('game-ended', { gameState: room.gameState });
     room.endGameRequested = null;
   });
 

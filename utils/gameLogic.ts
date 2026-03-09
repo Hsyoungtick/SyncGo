@@ -171,8 +171,30 @@ export const resolveTurn = (
     const whiteMoveWouldBeCaptured = whiteMove && blackCaptureSet.has(`${whiteMove.row},${whiteMove.col}`);
     
     if (blackMoveWouldBeCaptured && whiteMoveWouldBeCaptured) {
-      // Mutual capture - mark both positions as forbidden
+      // 相互提子 - 计算提子数（不包括落子点本身），移除被提棋子，标记落子点为禁入点
       clashed = true;
+      
+      // 计算黑方提子数（包括白方落子点，但落子点不移除）
+      for (const group of blackCaptures) {
+        for (const p of group) {
+          blackCapturesDelta++;
+          if (!(p.row === whiteMove?.row && p.col === whiteMove?.col)) {
+            nextBoard[p.row][p.col] = Player.None;
+          }
+        }
+      }
+      
+      // 计算白方提子数（包括黑方落子点，但落子点不移除）
+      for (const group of whiteCaptures) {
+        for (const p of group) {
+          whiteCapturesDelta++;
+          if (!(p.row === blackMove?.row && p.col === blackMove?.col)) {
+            nextBoard[p.row][p.col] = Player.None;
+          }
+        }
+      }
+      
+      // 标记落子点为禁入点
       if (blackMove) {
         nextBoard[blackMove.row][blackMove.col] = Player.Forbidden;
         clashedPoint = blackMove;
@@ -180,7 +202,7 @@ export const resolveTurn = (
       if (whiteMove && (whiteMove.row !== blackMove?.row || whiteMove.col !== blackMove?.col)) {
         nextBoard[whiteMove.row][whiteMove.col] = Player.Forbidden;
       }
-      return { newBoard: nextBoard, blackCapturesDelta: 0, whiteCapturesDelta: 0, clashed, clashedPoint };
+      return { newBoard: nextBoard, blackCapturesDelta, whiteCapturesDelta, clashed, clashedPoint };
     }
   }
 

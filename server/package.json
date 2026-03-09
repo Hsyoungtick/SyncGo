@@ -1,6 +1,9 @@
 {
-  "name": "synchro-go-server",
+  "name": "synchronous-go-server",
   "version": "1.0.0",
+  "description": "同步围棋服务端",
+  "author": "Hsyoungtick",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "start": "node index.js",

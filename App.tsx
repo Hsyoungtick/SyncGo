@@ -5,7 +5,7 @@ import Goban from './components/Goban';
 import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_SERVER = `http://${window.location.hostname}:3001`;
+const SOCKET_SERVER = import.meta.env.VITE_SOCKET_SERVER || import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:3001`;
 
 const App: React.FC = () => {
   // Game State
@@ -615,7 +615,7 @@ setShowEstimation(false);
 
       {/* Main Game Area */}
       <main className="flex-1 flex items-center justify-center p-4">
-        <div className="flex items-center justify-center gap-4 w-full max-w-[1200px]">
+        <div className="flex items-center justify-center gap-4 w-full max-w-300">
           {/* Left Panel - Info & Network */}
           <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-end">
           {/* Game Info */}
@@ -729,7 +729,7 @@ setShowEstimation(false);
         <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
           {/* Board Area */}
           {(netRole === NetworkRole.None && phase === GamePhase.Intermission) ? (
-            <div className="w-full aspect-square max-w-[600px] bg-stone-200 rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed border-stone-300 p-8 text-center">
+            <div className="w-full aspect-square max-w-150 bg-stone-200 rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed border-stone-300 p-8 text-center">
               <EyeOff size={64} className="text-stone-400" />
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold text-stone-700">请移交设备</h2>
@@ -744,7 +744,7 @@ setShowEstimation(false);
               </button>
             </div>
           ) : (
-            <div className="relative w-full aspect-square max-w-[600px]">
+            <div className="relative w-full aspect-square max-w-150">
               <Goban
                 board={board}
                 onCellClick={handleCellClick}

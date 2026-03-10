@@ -762,6 +762,14 @@ setShowEstimation(false);
                   </div>
                 </div>
               )}
+
+              {netRole === NetworkRole.None && connStatus === 'CONNECTING' && (
+                <div className="absolute inset-0 bg-stone-900/10 backdrop-blur-[1px] rounded-sm flex items-center justify-center z-20">
+                  <div className="bg-white px-6 py-3 rounded-full shadow-lg font-bold text-stone-600 animate-pulse border border-stone-200">
+                    正在创建房间...
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

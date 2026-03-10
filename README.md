@@ -1,7 +1,7 @@
 # 同步围棋
 
 双方同时落子的围棋，支持本地双人和网络对战。
-!\[预览]\(assets/preview.png)
+![预览](assets/preview.png)
 
 ## 游戏规则
 

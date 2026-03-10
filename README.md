@@ -1,6 +1,7 @@
 # 同步围棋
 
-双方同时落子的围棋，支持本地双人和局域网对战。
+双方同时落子的围棋，支持本地双人和网络对战。
+!\[预览]\(assets/preview.png)
 
 ## 游戏规则
 
@@ -58,7 +59,7 @@ cd server && node index.js
 npm run dev
 ```
 
-访问 http://localhost:3000 开始游戏
+访问 <http://localhost:3000> 开始游戏
 
 ### 构建生产版本
 
@@ -76,7 +77,60 @@ npm run build
 ├── utils/
 │   └── gameLogic.ts  # 游戏逻辑
 ├── server/
-│   └── index.js      # Socket.io 服务端
+│   ├── index.js      # Socket.io 服务端
+│   └── package.json  # 服务端依赖
+├── public/
+│   └── favicon.svg   # 网站图标
 ├── types.ts          # TypeScript 类型定义
-└── constants.ts      # 常量配置
+├── constants.ts      # 常量配置
+├── vercel.json       # Vercel 部署配置
+└── start.ps1         # Windows 启动脚本
 ```
+
+## 部署方案
+
+### 推荐部署方式：Vercel + Railway
+
+由于 Vercel 不支持 WebSocket，建议采用前后端分离部署方案：
+
+#### 1. 部署后端到 Railway
+
+1. 访问 [Railway.app](https://railway.app) 并登录
+2. 创建新项目，选择 "Deploy from GitHub repo"
+3. 选择你的仓库，设置：
+   - **Root Directory**: `server`
+   - **Build Command**: `npm install`
+   - **Start Command**: `node index.js`
+4. 部署完成后，获取生成的后端 URL（如 `https://syncgo.up.railway.app`）
+
+#### 2. 部署前端到 Vercel
+
+1. 访问 [Vercel](https://vercel.com) 并登录
+2. 导入你的仓库
+3. 配置项目：
+   - **Framework Preset**: Vite
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. 添加环境变量：
+   - `VITE_SERVER_URL` = 你的 Railway 后端 URL
+5. 点击 "Deploy"
+
+#### 3. 配置环境变量
+
+- **在 Railway 中**：添加 `FRONTEND_URL` 环境变量，值为你的 Vercel 前端地址
+- **在 Vercel 中**：确保 `VITE_SERVER_URL` 环境变量正确设置
+
+#### 4. 测试部署
+
+- 访问 Vercel 生成的前端 URL
+- 创建游戏房间，测试网络对战功能
+- 邀请朋友加入房间，测试实时通信
+
+### 其他部署选项
+
+| 平台               | WebSocket 支持 | 免费额度              | 推荐度  |
+| ---------------- | ------------ | ----------------- | ---- |
+| **Zeabur**       | ✅            | 500MB 存储 + 1GB 流量 | ⭐⭐⭐⭐ |
+| **Render**       | ✅            | 750小时/月           | ⭐⭐⭐  |
+| **DigitalOcean** | ✅            | $6/月              | ⭐⭐⭐⭐ |
+

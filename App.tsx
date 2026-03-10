@@ -755,10 +755,10 @@ setShowEstimation(false);
                 lastMove={history.length > 0 ? history[history.length - 1] : null}
               />
 
-              {myMoveCommitted && netRole !== NetworkRole.None && phase !== GamePhase.Resolution && (
+              {(myMoveCommitted || connStatus === 'CONNECTING' || connStatus === 'WAITING') && netRole !== NetworkRole.None && phase !== GamePhase.Resolution && (
                 <div className="absolute inset-0 bg-stone-900/10 backdrop-blur-[1px] rounded-sm flex items-center justify-center z-20">
                   <div className="bg-white px-6 py-3 rounded-full shadow-lg font-bold text-stone-600 animate-pulse border border-stone-200">
-                    等待对手...
+                    {connStatus === 'CONNECTING' ? '连接中...' : connStatus === 'WAITING' ? '等待对手加入...' : '等待对手...'}
                   </div>
                 </div>
               )}

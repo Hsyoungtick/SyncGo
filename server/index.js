@@ -210,6 +210,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('load-game', (gameState) => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    
+    const room = rooms.get(roomId);
+    if (room) {
+      room.gameState = gameState;
+      socket.to(roomId).emit('full-sync', gameState);
+      console.log(`[加载棋局] 房间 ${roomId} 用户 ${socket.id} 加载棋局并同步`);
+    }
+  });
+
   socket.on('request-end-game', (gameState) => {
     const roomId = socket.data.roomId;
     if (!roomId) return;

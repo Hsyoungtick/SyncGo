@@ -572,9 +572,20 @@ const App: React.FC = () => {
     setWhiteSelection(null);
     setLastClash(null);
     setScores(null);
-setShowEstimation(false);
+    setShowEstimation(false);
     setTerritoryMap(null);
     setEstimatedScore(null);
+
+    if (netRole !== NetworkRole.None && socketRef.current) {
+      const gameState = {
+        board: currentBoard,
+        captures: { black: bCaps, white: wCaps },
+        turn: moves.length + 1,
+        history: moves,
+        lastClash: null
+      };
+      socketRef.current.emit('load-game', gameState);
+    }
   };
 
   const copyRoomId = async (id: string) => {
@@ -654,8 +665,8 @@ setShowEstimation(false);
     <div className={containerClass}>
 
       {/* Main Game Area */}
-      <main className="flex-1 flex items-start justify-center p-4 md:p-6">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-4 w-full max-w-[1200px]">
+      <main className="flex-1 flex items-center justify-center p-4 md:p-6">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-4 w-full max-w-[1400px]">
           {/* Left Panel - Info & Network */}
           <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-end">
           {/* Game Info */}
@@ -787,7 +798,7 @@ setShowEstimation(false);
           </div>
           {/* Board Area */}
           {(netRole === NetworkRole.None && phase === GamePhase.Intermission) ? (
-            <div className={`w-full aspect-square max-w-[92vmin] sm:max-w-[520px] md:max-w-[600px] rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed p-4 sm:p-6 md:p-8 text-center ${darkMode ? 'bg-stone-900 border-stone-700' : 'bg-stone-200 border-stone-300'}`}>
+            <div className={`w-full aspect-square max-w-[92vmin] sm:max-w-[520px] md:max-w-[720px] rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed p-4 sm:p-6 md:p-8 text-center ${darkMode ? 'bg-stone-900 border-stone-700' : 'bg-stone-200 border-stone-300'}`}>
               <EyeOff size={64} className={darkMode ? 'text-stone-300' : 'text-stone-400'} />
               <div className="space-y-2">
                 <h2 className={`text-2xl font-bold ${darkMode ? 'text-stone-100' : 'text-stone-700'}`}>请移交设备</h2>
@@ -802,7 +813,7 @@ setShowEstimation(false);
               </button>
             </div>
           ) : (
-            <div className="relative w-full aspect-square max-w-[92vmin] sm:max-w-[520px] md:max-w-[600px]">
+            <div className="relative w-full aspect-square max-w-[92vmin] sm:max-w-[520px] md:max-w-[720px]">
               <Goban
                 board={board}
                 onCellClick={handleCellClick}
@@ -993,31 +1004,6 @@ setShowEstimation(false);
                 </div>
               </div>
             )}
-            <div className="flex gap-2 w-full justify-center">
-              <button
-                onClick={() => setDarkMode(prev => !prev)}
-                className={themeButtonClass}
-                title={darkMode ? '切换日间模式' : '切换夜间模式'}
-              >
-                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-              <a
-                href="https://github.com/Hsyoungtick/SyncGo"
-                target="_blank"
-                rel="noreferrer"
-                className={themeButtonClass}
-                title="项目源地址"
-              >
-                <Github size={20} />
-              </a>
-              <button
-                onClick={() => setShowRules(true)}
-                className={themeButtonClass}
-                title="游戏规则"
-              >
-                <HelpCircle size={20} />
-              </button>
-            </div>
           </div>
           <div className="w-full md:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className={`${cardClass} w-full`}>
@@ -1124,6 +1110,31 @@ setShowEstimation(false);
                 </div>
               </div>
             )}
+          </div>
+          <div className="w-full md:hidden flex gap-2 justify-center mt-2">
+            <button
+              onClick={() => setDarkMode(prev => !prev)}
+              className={themeButtonClass}
+              title={darkMode ? '切换日间模式' : '切换夜间模式'}
+            >
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <a
+              href="https://github.com/Hsyoungtick/SyncGo"
+              target="_blank"
+              rel="noreferrer"
+              className={themeButtonClass}
+              title="项目源地址"
+            >
+              <Github size={20} />
+            </a>
+            <button
+              onClick={() => setShowRules(true)}
+              className={themeButtonClass}
+              title="游戏规则"
+            >
+              <HelpCircle size={20} />
+            </button>
           </div>
         </div>
         

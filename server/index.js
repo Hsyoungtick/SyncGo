@@ -21,7 +21,10 @@ const io = new Server(httpServer, {
     origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  pingInterval: 10000,
+  pingTimeout: 60000,
+  transports: ['websocket', 'polling']
 });
 
 const rooms = new Map();

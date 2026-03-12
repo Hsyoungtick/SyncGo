@@ -127,22 +127,43 @@ const App: React.FC = () => {
     if (socketRef.current?.connected) return socketRef.current;
 
     const socket = io(SOCKET_SERVER, {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
     });
 
     socket.on('connect', () => {
       console.log('[Socket] 已连接到服务器');
+      
+      // 检查是否有保存的房间信息，尝试自动重连
+      const savedRoomId = localStorage.getItem('syncgo_room_id');
+      const savedRole = localStorage.getItem('syncgo_role');
+      if (savedRoomId && savedRole && netRole === NetworkRole.None) {
+        console.log('[Socket] 尝试自动重连到房间:', savedRoomId);
+        socket.emit('join-room', savedRoomId, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean; hasOpponent?: boolean }) => {
+          if (response.error) {
+            console.log('[Socket] 自动重连失败:', response.error);
+            localStorage.removeItem('syncgo_room_id');
+            localStorage.removeItem('syncgo_role');
+            return;
+          }
+          console.log('[Socket] 自动重连成功', response);
+          setRoomId(response.roomId!);
+          setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
+          setConnStatus(response.reconnected || response.hasOpponent ? 'CONNECTED' : 'WAITING');
+          if (response.reconnected) {
+            socket.emit('request-sync');
+          }
+        });
+      }
     });
 
     socket.on('disconnect', () => {
       console.log('[Socket] 已断开连接');
+      // 不清除房间信息，保留以便重连
       setConnStatus('DISCONNECTED');
-      setNetRole(NetworkRole.None);
-      setRoomId('');
-      setJoinInputId('');
-      setOpponentDisconnected(false);
-      setReconnectCountdown(60);
-      window.history.pushState({}, '', '/');
     });
 
     socket.on('player-joined', () => {
@@ -255,6 +276,10 @@ const App: React.FC = () => {
       setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
       setConnStatus('WAITING');
       copyRoomId(response.roomId);
+
+      // 保存房间信息到 localStorage
+      localStorage.setItem('syncgo_room_id', response.roomId);
+      localStorage.setItem('syncgo_role', response.role);
 
       window.history.pushState({}, '', `/${response.roomId}`);
     });
@@ -679,6 +704,8 @@ setShowEstimation(false);
                   setOpponentDisconnected(false);
                   setReconnectCountdown(60);
                   resetGameLocal();
+                  localStorage.removeItem('syncgo_room_id');
+                  localStorage.removeItem('syncgo_role');
                   window.history.pushState({}, '', '/');
                 }}
                 className="w-full mt-2 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"

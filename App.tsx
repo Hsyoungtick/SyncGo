@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Player, BoardState, GamePhase, Point, TerritoryMap, MoveRecord, NetworkRole } from './types';
 import { createEmptyBoard, resolveTurn, calculateTerritory } from './utils/gameLogic';
 import Goban from './components/Goban';
-import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap } from 'lucide-react';
+import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap, HelpCircle, Sun, Moon, Github } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_SERVER = import.meta.env.VITE_SOCKET_SERVER || import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:3001`;
@@ -41,6 +41,8 @@ const App: React.FC = () => {
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
   const [reconnectCountdown, setReconnectCountdown] = useState(60);
   const [quickMode, setQuickMode] = useState(() => localStorage.getItem('quickMode') === 'true');
+  const [showRules, setShowRules] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('syncgo_theme') === 'dark');
 
   // Socket ref
   const socketRef = useRef<Socket | null>(null);
@@ -49,6 +51,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('quickMode', String(quickMode));
   }, [quickMode]);
+
+  useEffect(() => {
+    localStorage.setItem('syncgo_theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   // Refs to access latest state in callbacks
   const movesRef = useRef<{ black: Point | null, white: Point | null }>({ black: null, white: null });
@@ -635,8 +641,17 @@ setShowEstimation(false);
     return phase === GamePhase.BlackInput ? Player.Black : Player.White;
   };
 
+  const themeButtonClass = `w-12 h-12 flex items-center justify-center rounded-xl shadow-md transition-colors border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'}`;
+  const containerClass = `min-h-screen font-sans flex flex-col ${darkMode ? 'bg-stone-900 text-stone-100' : 'bg-stone-100 text-stone-900'}`;
+  const cardClass = `rounded-xl shadow-lg p-4 border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-900 border-stone-200'}`;
+  const compactCardClass = `rounded-xl shadow-md p-4 border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200'}`;
+  const buttonClass = `rounded-xl font-medium shadow-md border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'}`;
+  const smallButtonClass = `rounded-lg border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'}`;
+  const mutedTextClass = darkMode ? 'text-stone-300' : 'text-stone-500';
+  const inputClass = `w-full px-3 py-2 rounded-lg text-center uppercase tracking-wider font-mono text-sm border focus:outline-none ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 placeholder:text-stone-500 hover:border-stone-500 focus:border-stone-500' : 'bg-white text-stone-700 border-stone-200 hover:border-stone-400 focus:border-stone-400'}`;
+
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-900 font-sans flex flex-col">
+    <div className={containerClass}>
 
       {/* Main Game Area */}
       <main className="flex-1 flex items-start justify-center p-4 md:p-6">
@@ -644,10 +659,10 @@ setShowEstimation(false);
           {/* Left Panel - Info & Network */}
           <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-end">
           {/* Game Info */}
-          <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+          <div className={`${cardClass} w-full`}>
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-stone-900"></div>
+                <div className={`w-4 h-4 rounded-full bg-stone-900 ${darkMode ? 'border border-white' : ''}`}></div>
                 <span className="text-sm font-medium">黑方提子</span>
               </div>
               <span className="text-lg font-bold">{captures.black}</span>
@@ -659,9 +674,9 @@ setShowEstimation(false);
               </div>
               <span className="text-lg font-bold">{captures.white}</span>
             </div>
-            <div className="border-t border-stone-200 pt-3 mt-3">
+            <div className={`border-t pt-3 mt-3 ${darkMode ? 'border-stone-700' : 'border-stone-200'}`}>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-stone-500">回合</span>
+                <span className={`text-sm ${mutedTextClass}`}>回合</span>
                 <span className="text-lg font-bold">{turnCount}</span>
               </div>
             </div>
@@ -669,25 +684,26 @@ setShowEstimation(false);
 
           {/* Network Status */}
           {netRole !== NetworkRole.None && (
-            <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+            <div className={`${cardClass} w-full`}>
               <div className="flex items-center gap-2 mb-2">
-                <Wifi size={18} className={
+                <Wifi size={18} className={darkMode ? 'text-stone-200' : (
                   connStatus === 'CONNECTED' ? 'text-green-600' :
                     connStatus === 'WAITING' ? 'text-amber-600' : 'text-red-600'
-                } />
-                <span className={`text-sm px-2 py-0.5 rounded ${connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
-                    connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                )} />
+                <span className={`text-sm px-2 py-0.5 rounded border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : (
+                    connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700 border-green-200' :
+                    connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200'
+                  )}`}>
                   {connStatus === 'CONNECTED' ? '已连接' :
                     connStatus === 'WAITING' ? '等待对手' : '断开连接'}
                 </span>
               </div>
               {roomId && (
-                <div className="mt-2 text-lg text-stone-500 text-center flex items-center justify-center gap-1">
+                <div className={`mt-2 text-lg ${mutedTextClass} text-center flex items-center justify-center gap-1`}>
                    <span className="font-mono font-bold">{roomId}</span>
                   <button
                     onClick={() => copyRoomId(roomId)}
-                    className="p-1 hover:bg-stone-200 rounded transition-colors"
+                    className={`p-1 rounded transition-colors ${darkMode ? 'hover:bg-stone-800' : 'hover:bg-stone-200'}`}
                     title="复制房间号"
                   >
                     <Copy size={18} />
@@ -708,7 +724,7 @@ setShowEstimation(false);
                   localStorage.removeItem('syncgo_role');
                   window.history.pushState({}, '', '/');
                 }}
-                className="w-full mt-2 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                className={`w-full mt-2 py-1.5 text-sm rounded-lg transition-colors border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'text-red-600 bg-red-50 hover:bg-red-100 border-red-100'}`}
               >
                 退出房间
               </button>
@@ -717,23 +733,23 @@ setShowEstimation(false);
 
           {/* Network Panel - only show when not in a room */}
           {netRole === NetworkRole.None && (
-            <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+            <div className={`${cardClass} w-full`}>
               <div className="flex items-center gap-2 mb-3">
-                <Wifi size={18} className="text-blue-600" />
+                <Wifi size={18} className={darkMode ? 'text-stone-200' : 'text-blue-600'} />
                 <span className="text-sm font-medium">创建房间</span>
               </div>
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <button
                     onClick={() => createRoom('black')}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 ${smallButtonClass}`}
                   >
-                    <div className="w-4 h-4 rounded-full bg-stone-900"></div>
+                    <div className={`w-4 h-4 rounded-full bg-stone-900 ${darkMode ? 'border border-white' : ''}`}></div>
                     <span className="text-sm">执黑</span>
                   </button>
                   <button
                     onClick={() => createRoom('white')}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 ${smallButtonClass}`}
                   >
                     <div className="w-4 h-4 rounded-full bg-white border-2 border-stone-300"></div>
                     <span className="text-sm">执白</span>
@@ -744,7 +760,7 @@ setShowEstimation(false);
                   value={joinInputId}
                   onChange={(e) => setJoinInputId(e.target.value.toUpperCase())}
                   placeholder="输入房间号加入"
-                  className="w-full px-3 py-2 border border-stone-200 rounded-lg text-center uppercase tracking-wider font-mono text-sm hover:border-stone-400 focus:outline-none focus:border-stone-400"
+                  className={inputClass}
                   maxLength={6}
                 />
               </div>
@@ -755,7 +771,9 @@ setShowEstimation(false);
         {/* Center - Board */}
         <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
           <div className="w-full md:hidden">
-            <div className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300
+            <div className={darkMode
+              ? 'w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300 bg-stone-900 text-stone-100 border border-stone-700 hover:bg-stone-800'
+              : `w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300
             ${opponentDisconnected ? 'bg-red-100 text-red-900' : ''}
             ${phase === GamePhase.Resolution ? 'bg-blue-100 text-blue-900' : ''}
             ${netRole === NetworkRole.None && phase === GamePhase.Intermission ? 'bg-amber-100 text-amber-900' : ''}
@@ -769,15 +787,15 @@ setShowEstimation(false);
           </div>
           {/* Board Area */}
           {(netRole === NetworkRole.None && phase === GamePhase.Intermission) ? (
-            <div className="w-full aspect-square max-w-[92vmin] sm:max-w-[520px] md:max-w-[600px] bg-stone-200 rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed border-stone-300 p-4 sm:p-6 md:p-8 text-center">
-              <EyeOff size={64} className="text-stone-400" />
+            <div className={`w-full aspect-square max-w-[92vmin] sm:max-w-[520px] md:max-w-[600px] rounded-lg flex flex-col items-center justify-center gap-6 shadow-inner border-4 border-dashed p-4 sm:p-6 md:p-8 text-center ${darkMode ? 'bg-stone-900 border-stone-700' : 'bg-stone-200 border-stone-300'}`}>
+              <EyeOff size={64} className={darkMode ? 'text-stone-300' : 'text-stone-400'} />
               <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-stone-700">请移交设备</h2>
-                <p className="text-stone-500">黑方已完成操作。请将设备交给白方，以便其秘密落子。</p>
+                <h2 className={`text-2xl font-bold ${darkMode ? 'text-stone-100' : 'text-stone-700'}`}>请移交设备</h2>
+                <p className={mutedTextClass}>黑方已完成操作。请将设备交给白方，以便其秘密落子。</p>
               </div>
               <button
                 onClick={proceedFromIntermission}
-                className="flex items-center justify-center gap-2 px-8 py-3 bg-white text-stone-800 rounded-xl hover:bg-stone-100 transition-colors font-semibold shadow-lg border border-stone-200"
+                className={`flex items-center justify-center gap-2 px-8 py-3 rounded-xl transition-colors font-semibold shadow-lg border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-800 border-stone-200 hover:bg-stone-100'}`}
               >
                 <Play size={18} fill="currentColor" />
                 我是白方玩家
@@ -797,7 +815,7 @@ setShowEstimation(false);
 
               {(myMoveCommitted || connStatus === 'CONNECTING' || connStatus === 'WAITING') && netRole !== NetworkRole.None && phase !== GamePhase.Resolution && (
                 <div className="absolute inset-0 bg-stone-900/10 backdrop-blur-[1px] rounded-sm flex items-center justify-center z-20">
-                  <div className="bg-white px-6 py-3 rounded-full shadow-lg font-bold text-stone-600 animate-pulse border border-stone-200">
+                  <div className={`px-6 py-3 rounded-full shadow-lg font-bold animate-pulse border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : 'bg-white text-stone-600 border-stone-200'}`}>
                     {connStatus === 'CONNECTING' ? '连接中...' : connStatus === 'WAITING' ? '等待对手加入...' : '等待对手...'}
                   </div>
                 </div>
@@ -805,7 +823,7 @@ setShowEstimation(false);
 
               {netRole === NetworkRole.None && connStatus === 'CONNECTING' && (
                 <div className="absolute inset-0 bg-stone-900/10 backdrop-blur-[1px] rounded-sm flex items-center justify-center z-20">
-                  <div className="bg-white px-6 py-3 rounded-full shadow-lg font-bold text-stone-600 animate-pulse border border-stone-200">
+                  <div className={`px-6 py-3 rounded-full shadow-lg font-bold animate-pulse border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : 'bg-white text-stone-600 border-stone-200'}`}>
                     正在创建房间...
                   </div>
                 </div>
@@ -820,10 +838,10 @@ setShowEstimation(false);
                     onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
                     disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                     className={`
-                    flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                    flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed border
                     ${myMoveCommitted && !opponentCommitted
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-white text-stone-800 hover:bg-stone-100 border border-stone-200'
+                      ? (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600')
+                      : (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-800 border-stone-200 hover:bg-stone-100')
                     }
                   `}
                   >
@@ -841,28 +859,28 @@ setShowEstimation(false);
                   </button>
                   <button
                     onClick={() => setQuickMode(!quickMode)}
-                    className={`h-12 w-12 flex items-center justify-center rounded-xl shadow-md transition-all ${
+                    className={`h-12 w-12 flex items-center justify-center rounded-xl shadow-md transition-all border ${
                     quickMode 
-                      ? 'bg-stone-800 text-white hover:bg-stone-700'
-                      : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                      ? (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-stone-800 text-white border-stone-800 hover:bg-stone-700')
+                      : (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-100')
                   }`}
                     title={quickMode ? '快速模式已开启' : '开启快速模式'}
                   >
-                    <Zap size={18} strokeWidth={quickMode ? 3 : 2} />
+                  <Zap size={18} strokeWidth={quickMode ? 3 : 2} className={darkMode ? 'text-white' : undefined} />
                   </button>
                 </div>
 
                 {showEstimation && estimatedScore ? (
                   <button
                     onClick={toggleEstimation}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                    className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 bg-stone-900 rounded-full"></div>
                         <span className="font-bold">{estimatedScore.black.toFixed(1)}</span>
                       </div>
-                      <span className="text-xs text-stone-500">{getScoreDiff(estimatedScore.black, estimatedScore.white)}</span>
+                      <span className={`text-xs ${mutedTextClass}`}>{getScoreDiff(estimatedScore.black, estimatedScore.white)}</span>
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 bg-stone-100 rounded-full border border-stone-300"></div>
                         <span className="font-bold">{estimatedScore.white.toFixed(1)}</span>
@@ -872,7 +890,7 @@ setShowEstimation(false);
                 ) : (
                   <button
                     onClick={toggleEstimation}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                    className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                   >
                     <ChartBar size={18} />
                     形势判断
@@ -883,13 +901,13 @@ setShowEstimation(false);
                   <div className="flex gap-2 w-full">
                     <button
                       onClick={() => socketRef.current?.emit('agree-end-game')}
-                      className="flex-1 p-3 bg-white text-green-700 rounded-xl font-medium shadow-md hover:bg-green-50 border border-stone-200"
+                      className={`flex-1 p-3 ${buttonClass}`}
                     >
                       同意
                     </button>
                     <button
                       onClick={() => socketRef.current?.emit('cancel-end-game')}
-                      className="flex-1 p-3 bg-white text-red-600 rounded-xl font-medium shadow-md hover:bg-red-50 border border-stone-200"
+                      className={`flex-1 p-3 ${buttonClass}`}
                     >
                       拒绝
                     </button>
@@ -900,7 +918,7 @@ setShowEstimation(false);
                       setEndGameRequested(false);
                       socketRef.current?.emit('cancel-end-game');
                     }}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                    className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                   >
                     <XCircle size={18} />
                     取消请求
@@ -908,7 +926,7 @@ setShowEstimation(false);
                 ) : (
                   <button
                     onClick={endGame}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                    className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                   >
                     <Flag size={18} />
                     结束对局
@@ -918,12 +936,12 @@ setShowEstimation(false);
                 <div className="flex gap-2 w-full">
                   <button
                     onClick={saveGame}
-                    className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                    className={`flex-1 flex items-center justify-center gap-1.5 p-3 ${buttonClass}`}
                   >
                     <Download size={18} />
                     保存
                   </button>
-                  <label className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 cursor-pointer">
+                  <label className={`flex-1 flex items-center justify-center gap-1.5 p-3 cursor-pointer ${buttonClass}`}>
                     <Upload size={18} />
                     加载
                     <input type="file" accept=".json" onChange={loadGame} className="hidden" />
@@ -934,26 +952,26 @@ setShowEstimation(false);
 
             {phase === GamePhase.GameOver && (
               <div className="flex flex-col gap-2 w-full">
-                <div className="bg-white shadow-md rounded-xl p-4 border border-stone-200">
+                <div className={compactCardClass}>
                   <div className="text-center mb-3">
-                    <span className="text-sm text-stone-500 font-medium">游戏结束</span>
+                    <span className={`text-sm font-medium ${mutedTextClass}`}>游戏结束</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-center flex-1">
-                      <div className="text-xl font-black text-black">{scores.black.toFixed(1)}</div>
-                      <div className="text-xs text-stone-500">黑</div>
+                      <div className="text-xl font-black">{scores.black.toFixed(1)}</div>
+                      <div className={`text-xs ${mutedTextClass}`}>黑</div>
                     </div>
-                    <div className="text-sm font-semibold text-stone-600">{getScoreDiff(scores.black, scores.white)}</div>
+                    <div className={`text-sm font-semibold ${darkMode ? 'text-stone-100' : 'text-stone-600'}`}>{getScoreDiff(scores.black, scores.white)}</div>
                     <div className="text-center flex-1">
-                      <div className="text-xl font-black text-stone-800">{scores.white.toFixed(1)}</div>
-                      <div className="text-xs text-stone-500">白</div>
+                      <div className="text-xl font-black">{scores.white.toFixed(1)}</div>
+                      <div className={`text-xs ${mutedTextClass}`}>白</div>
                     </div>
                   </div>
                 </div>
                 
                 <button
                   onClick={resetGameLocal}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                 >
                   <RotateCcw size={18} />
                   再来一局
@@ -962,12 +980,12 @@ setShowEstimation(false);
                 <div className="flex gap-2 w-full">
                   <button
                     onClick={saveGame}
-                    className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                    className={`flex-1 flex items-center justify-center gap-1.5 p-3 ${buttonClass}`}
                   >
                     <Download size={14} />
                     保存
                   </button>
-                  <label className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 cursor-pointer">
+                  <label className={`flex-1 flex items-center justify-center gap-1.5 p-3 cursor-pointer ${buttonClass}`}>
                     <Upload size={14} />
                     加载
                     <input type="file" accept=".json" onChange={loadGame} className="hidden" />
@@ -975,14 +993,39 @@ setShowEstimation(false);
                 </div>
               </div>
             )}
+            <div className="flex gap-2 w-full justify-center">
+              <button
+                onClick={() => setDarkMode(prev => !prev)}
+                className={themeButtonClass}
+                title={darkMode ? '切换日间模式' : '切换夜间模式'}
+              >
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+              <a
+                href="https://github.com/Hsyoungtick/SyncGo"
+                target="_blank"
+                rel="noreferrer"
+                className={themeButtonClass}
+                title="项目源地址"
+              >
+                <Github size={20} />
+              </a>
+              <button
+                onClick={() => setShowRules(true)}
+                className={themeButtonClass}
+                title="游戏规则"
+              >
+                <HelpCircle size={20} />
+              </button>
+            </div>
           </div>
           <div className="w-full md:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+            <div className={`${cardClass} w-full`}>
               <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-stone-900"></div>
-                  <span className="text-sm font-medium">黑方提子</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded-full bg-stone-900 ${darkMode ? 'border border-white' : ''}`}></div>
+                <span className="text-sm font-medium">黑方提子</span>
+              </div>
                 <span className="text-lg font-bold">{captures.black}</span>
               </div>
               <div className="flex justify-between items-center mb-3">
@@ -992,33 +1035,34 @@ setShowEstimation(false);
                 </div>
                 <span className="text-lg font-bold">{captures.white}</span>
               </div>
-              <div className="border-t border-stone-200 pt-3 mt-3">
+              <div className={`border-t pt-3 mt-3 ${darkMode ? 'border-stone-700' : 'border-stone-200'}`}>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-stone-500">回合</span>
+                  <span className={`text-sm ${mutedTextClass}`}>回合</span>
                   <span className="text-lg font-bold">{turnCount}</span>
                 </div>
               </div>
             </div>
             {netRole !== NetworkRole.None && (
-              <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+              <div className={`${cardClass} w-full`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <Wifi size={18} className={
+                  <Wifi size={18} className={darkMode ? 'text-stone-200' : (
                   connStatus === 'CONNECTED' ? 'text-green-600' :
                     connStatus === 'WAITING' ? 'text-amber-600' : 'text-red-600'
-                } />
-                  <span className={`text-sm px-2 py-0.5 rounded ${connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700' :
-                    connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                  }`}>
+                )} />
+                  <span className={`text-sm px-2 py-0.5 rounded border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : (
+                    connStatus === 'CONNECTED' ? 'bg-green-100 text-green-700 border-green-200' :
+                    connStatus === 'WAITING' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-100 text-red-700 border-red-200'
+                  )}`}>
                     {connStatus === 'CONNECTED' ? '已连接' :
                       connStatus === 'WAITING' ? '等待对手' : '断开连接'}
                   </span>
                 </div>
                 {roomId && (
-                  <div className="mt-2 text-lg text-stone-500 text-center flex items-center justify-center gap-1">
+                  <div className={`mt-2 text-lg ${mutedTextClass} text-center flex items-center justify-center gap-1`}>
                     <span className="font-mono font-bold">{roomId}</span>
                     <button
                       onClick={() => copyRoomId(roomId)}
-                      className="p-1 hover:bg-stone-200 rounded transition-colors"
+                      className={`p-1 rounded transition-colors ${darkMode ? 'hover:bg-stone-800' : 'hover:bg-stone-200'}`}
                       title="复制房间号"
                     >
                       <Copy size={18} />
@@ -1039,7 +1083,7 @@ setShowEstimation(false);
                     localStorage.removeItem('syncgo_role');
                     window.history.pushState({}, '', '/');
                   }}
-                  className="w-full mt-2 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                  className={`w-full mt-2 py-1.5 text-sm rounded-lg transition-colors border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'text-red-600 bg-red-50 hover:bg-red-100 border-red-100'}`}
                 >
                   退出房间
                 </button>
@@ -1047,23 +1091,23 @@ setShowEstimation(false);
             )}
 
             {netRole === NetworkRole.None && (
-              <div className="bg-white rounded-xl shadow-lg p-4 border border-stone-200 w-full">
+              <div className={`${cardClass} w-full`}>
                 <div className="flex items-center gap-2 mb-3">
-                  <Wifi size={18} className="text-blue-600" />
+                  <Wifi size={18} className={darkMode ? 'text-stone-200' : 'text-blue-600'} />
                   <span className="text-sm font-medium">创建房间</span>
                 </div>
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <button
                       onClick={() => createRoom('black')}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 ${smallButtonClass}`}
                     >
                       <div className="w-4 h-4 rounded-full bg-stone-900"></div>
                       <span className="text-sm">执黑</span>
                     </button>
                     <button
                       onClick={() => createRoom('white')}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 ${smallButtonClass}`}
                     >
                       <div className="w-4 h-4 rounded-full bg-white border-2 border-stone-300"></div>
                       <span className="text-sm">执白</span>
@@ -1074,7 +1118,7 @@ setShowEstimation(false);
                     value={joinInputId}
                     onChange={(e) => setJoinInputId(e.target.value.toUpperCase())}
                     placeholder="输入房间号加入"
-                    className="w-full px-3 py-2 border border-stone-200 rounded-lg text-center uppercase tracking-wider font-mono text-sm hover:border-stone-400 focus:outline-none focus:border-stone-400"
+                    className={inputClass}
                     maxLength={6}
                   />
                 </div>
@@ -1086,7 +1130,9 @@ setShowEstimation(false);
         {/* Right Panel - Status & Controls (Desktop only) */}
         <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-start">
           {/* Status Bar */}
-          <div className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300
+          <div className={darkMode
+            ? 'w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300 bg-stone-900 text-stone-100 border border-stone-700 hover:bg-stone-800'
+            : `w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300
             ${opponentDisconnected ? 'bg-red-100 text-red-900' : ''}
             ${phase === GamePhase.Resolution ? 'bg-blue-100 text-blue-900' : ''}
             ${netRole === NetworkRole.None && phase === GamePhase.Intermission ? 'bg-amber-100 text-amber-900' : ''}
@@ -1106,10 +1152,10 @@ setShowEstimation(false);
                   onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
                   disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                   className={`
-                    flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed
+                    flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed border
                     ${myMoveCommitted && !opponentCommitted
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-white text-stone-800 hover:bg-stone-100 border border-stone-200'
+                      ? (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600')
+                      : (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-800 border-stone-200 hover:bg-stone-100')
                     }
                   `}
                 >
@@ -1127,28 +1173,28 @@ setShowEstimation(false);
                 </button>
                 <button
                   onClick={() => setQuickMode(!quickMode)}
-                  className={`h-12 w-12 flex items-center justify-center rounded-xl shadow-md transition-all ${
+                  className={`h-12 w-12 flex items-center justify-center rounded-xl shadow-md transition-all border ${
                     quickMode 
-                      ? 'bg-stone-800 text-white hover:bg-stone-700'
-                      : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                      ? (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-stone-800 text-white border-stone-800 hover:bg-stone-700')
+                      : (darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-100')
                   }`}
                   title={quickMode ? '快速模式已开启' : '开启快速模式'}
                 >
-                  <Zap size={18} strokeWidth={quickMode ? 3 : 2} />
+                  <Zap size={18} strokeWidth={quickMode ? 3 : 2} className={darkMode ? 'text-white' : undefined} />
                 </button>
               </div>
 
               {showEstimation && estimatedScore ? (
                 <button
                   onClick={toggleEstimation}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                  className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-3 bg-stone-900 rounded-full"></div>
                       <span className="font-bold">{estimatedScore.black.toFixed(1)}</span>
                     </div>
-                    <span className="text-xs text-stone-500">{getScoreDiff(estimatedScore.black, estimatedScore.white)}</span>
+                    <span className={`text-xs ${mutedTextClass}`}>{getScoreDiff(estimatedScore.black, estimatedScore.white)}</span>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-3 bg-stone-100 rounded-full border border-stone-300"></div>
                       <span className="font-bold">{estimatedScore.white.toFixed(1)}</span>
@@ -1158,7 +1204,7 @@ setShowEstimation(false);
               ) : (
                 <button
                   onClick={toggleEstimation}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 transition-colors"
+                  className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                 >
                   <ChartBar size={18} />
                   形势判断
@@ -1169,13 +1215,13 @@ setShowEstimation(false);
                 <div className="flex gap-2 w-full">
                   <button
                     onClick={() => socketRef.current?.emit('agree-end-game')}
-                    className="flex-1 p-3 bg-white text-green-700 rounded-xl font-medium shadow-md hover:bg-green-50 border border-stone-200"
+                    className={`flex-1 p-3 ${buttonClass}`}
                   >
                     同意
                   </button>
                   <button
                     onClick={() => socketRef.current?.emit('cancel-end-game')}
-                    className="flex-1 p-3 bg-white text-red-600 rounded-xl font-medium shadow-md hover:bg-red-50 border border-stone-200"
+                    className={`flex-1 p-3 ${buttonClass}`}
                   >
                     拒绝
                   </button>
@@ -1186,7 +1232,7 @@ setShowEstimation(false);
                     setEndGameRequested(false);
                     socketRef.current?.emit('cancel-end-game');
                   }}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                 >
                   <XCircle size={18} />
                   取消请求
@@ -1194,7 +1240,7 @@ setShowEstimation(false);
               ) : (
                 <button
                   onClick={endGame}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-600 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                 >
                   <Flag size={18} />
                   结束对局
@@ -1204,12 +1250,12 @@ setShowEstimation(false);
               <div className="flex gap-2 w-full">
                 <button
                   onClick={saveGame}
-                  className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className={`flex-1 flex items-center justify-center gap-1.5 p-3 ${buttonClass}`}
                 >
                   <Download size={18} />
                   保存
                 </button>
-                <label className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 cursor-pointer">
+                <label className={`flex-1 flex items-center justify-center gap-1.5 p-3 cursor-pointer ${buttonClass}`}>
                   <Upload size={18} />
                   加载
                   <input type="file" accept=".json" onChange={loadGame} className="hidden" />
@@ -1220,26 +1266,26 @@ setShowEstimation(false);
           
           {phase === GamePhase.GameOver && (
             <div className="flex flex-col gap-2 w-full">
-              <div className="bg-white shadow-md rounded-xl p-4 border border-stone-200">
+              <div className={compactCardClass}>
                 <div className="text-center mb-3">
-                  <span className="text-sm text-stone-500 font-medium">游戏结束</span>
+                  <span className={`text-sm font-medium ${mutedTextClass}`}>游戏结束</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-center flex-1">
-                    <div className="text-xl font-black text-black">{scores.black.toFixed(1)}</div>
-                    <div className="text-xs text-stone-500">黑</div>
+                    <div className="text-xl font-black">{scores.black.toFixed(1)}</div>
+                    <div className={`text-xs ${mutedTextClass}`}>黑</div>
                   </div>
-                  <div className="text-sm font-semibold text-stone-600">{getScoreDiff(scores.black, scores.white)}</div>
+                  <div className={`text-sm font-semibold ${darkMode ? 'text-stone-100' : 'text-stone-600'}`}>{getScoreDiff(scores.black, scores.white)}</div>
                   <div className="text-center flex-1">
-                    <div className="text-xl font-black text-stone-800">{scores.white.toFixed(1)}</div>
-                    <div className="text-xs text-stone-500">白</div>
+                    <div className="text-xl font-black">{scores.white.toFixed(1)}</div>
+                    <div className={`text-xs ${mutedTextClass}`}>白</div>
                   </div>
                 </div>
               </div>
               
               <button
                 onClick={resetGameLocal}
-                className="w-full flex items-center justify-center gap-2 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
               >
                 <RotateCcw size={18} />
                 再来一局
@@ -1248,12 +1294,12 @@ setShowEstimation(false);
               <div className="flex gap-2 w-full">
                 <button
                   onClick={saveGame}
-                  className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200"
+                  className={`flex-1 flex items-center justify-center gap-1.5 p-3 ${buttonClass}`}
                 >
                   <Download size={14} />
                   保存
                 </button>
-                <label className="flex-1 flex items-center justify-center gap-1.5 p-3 bg-white text-stone-700 rounded-xl font-medium shadow-md hover:bg-stone-100 border border-stone-200 cursor-pointer">
+                <label className={`flex-1 flex items-center justify-center gap-1.5 p-3 cursor-pointer ${buttonClass}`}>
                   <Upload size={14} />
                   加载
                   <input type="file" accept=".json" onChange={loadGame} className="hidden" />
@@ -1261,12 +1307,70 @@ setShowEstimation(false);
               </div>
             </div>
           )}
+
+          <div className="flex gap-2 w-full mt-auto justify-center">
+            <button
+              onClick={() => setDarkMode(prev => !prev)}
+              className={themeButtonClass}
+              title={darkMode ? '切换日间模式' : '切换夜间模式'}
+            >
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <a
+              href="https://github.com/Hsyoungtick/SyncGo"
+              target="_blank"
+              rel="noreferrer"
+              className={themeButtonClass}
+              title="项目源地址"
+            >
+              <Github size={20} />
+            </a>
+            <button
+              onClick={() => setShowRules(true)}
+              className={themeButtonClass}
+              title="游戏规则"
+            >
+              <HelpCircle size={20} />
+            </button>
+          </div>
           
         </div>
         </div>
         
         {territoryMap && showEstimation && phase !== GamePhase.GameOver && (
           <div className="hidden">
+          </div>
+        )}
+
+        {showRules && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className={`w-full max-w-lg rounded-2xl border shadow-xl ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : 'bg-white text-stone-800 border-stone-200'}`}>
+              <div className={`flex items-center justify-between px-6 py-4 border-b ${darkMode ? 'border-stone-700' : 'border-stone-200/60'}`}>
+                <div className="text-lg font-bold">游戏规则</div>
+                <button
+                  onClick={() => setShowRules(false)}
+                  className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-stone-800' : 'hover:bg-stone-100'}`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="px-6 py-4 space-y-3 text-sm leading-6">
+                <div>1. 每手棋双方先各自选择落子点并同时亮出。</div>
+                <div>2. 若双方选择相同点，则该手无效，该点成为禁入点。</div>
+                <div>3. 若双方选择不同点，则同时落子后结算无气棋子并提掉。</div>
+                <div>4. 如果提子只包含该回合落下的子，这两个位置成为禁入点。</div>
+                <div>5. 禁入点可作为棋子的气，双方之后不能落子于该点，直到出现不同落子。</div>
+                <div>6. 无贴目。</div>
+              </div>
+              <div className="px-6 pb-5">
+                <button
+                  onClick={() => setShowRules(false)}
+                  className={`w-full py-2.5 rounded-xl font-semibold shadow-md border transition-colors ${darkMode ? 'bg-stone-700 text-stone-100 border-stone-600 hover:bg-stone-600' : 'bg-stone-900 text-white border-stone-900 hover:bg-stone-800'}`}
+                >
+                  我知道了
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

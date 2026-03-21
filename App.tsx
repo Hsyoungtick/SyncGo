@@ -1129,7 +1129,7 @@ const App: React.FC = () => {
               <Github size={20} />
             </a>
             <a
-              href="https://www.bilibili.com/"
+              href="https://www.bilibili.com/video/BV1exAFzjE2n"
               target="_blank"
               rel="noreferrer"
               className={themeButtonClass}
@@ -1346,7 +1346,7 @@ const App: React.FC = () => {
               <Github size={20} />
             </a>
             <a
-              href="https://www.bilibili.com/"
+              href="https://www.bilibili.com/video/BV1exAFzjE2n"
               target="_blank"
               rel="noreferrer"
               className={themeButtonClass}

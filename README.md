@@ -1,4 +1,4 @@
-# 同步围棋
+# SyncGo
 
 ![预览](assets/preview.png)
 

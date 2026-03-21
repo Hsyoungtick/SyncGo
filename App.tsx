@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Player, BoardState, GamePhase, Point, TerritoryMap, MoveRecord, NetworkRole } from './types';
 import { createEmptyBoard, resolveTurn, calculateTerritory } from './utils/gameLogic';
 import Goban from './components/Goban';
-import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap, HelpCircle, Sun, Moon, Github } from 'lucide-react';
+import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap, HelpCircle, Sun, Moon, Github, Monitor } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_SERVER = import.meta.env.VITE_SOCKET_SERVER || import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:3001`;
@@ -1128,10 +1128,19 @@ const App: React.FC = () => {
             >
               <Github size={20} />
             </a>
+            <a
+              href="https://www.bilibili.com/"
+              target="_blank"
+              rel="noreferrer"
+              className={themeButtonClass}
+              title="游戏规则（视频）"
+            >
+              <Monitor size={20} />
+            </a>
             <button
               onClick={() => setShowRules(true)}
               className={themeButtonClass}
-              title="游戏规则"
+              title="游戏规则（文字）"
             >
               <HelpCircle size={20} />
             </button>
@@ -1336,10 +1345,19 @@ const App: React.FC = () => {
             >
               <Github size={20} />
             </a>
+            <a
+              href="https://www.bilibili.com/"
+              target="_blank"
+              rel="noreferrer"
+              className={themeButtonClass}
+              title="游戏规则（视频）"
+            >
+              <Monitor size={20} />
+            </a>
             <button
               onClick={() => setShowRules(true)}
               className={themeButtonClass}
-              title="游戏规则"
+              title="游戏规则（文字）"
             >
               <HelpCircle size={20} />
             </button>

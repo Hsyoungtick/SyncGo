@@ -1,7 +1,7 @@
 {
   "name": "synchronous-go",
   "version": "1.0.0",
-  "description": "一款创新的围棋变体游戏，支持本地双人和网络对战",
+  "description": "同步围棋，同步回合制的围棋，支持本地双人和网络对战",
   "author": "Hsyoungtick",
   "license": "MIT",
   "type": "module",

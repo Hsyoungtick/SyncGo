@@ -1355,7 +1355,7 @@ const App: React.FC = () => {
 
         {showRules && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-            <div className={`w-full max-w-lg rounded-2xl border shadow-xl ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : 'bg-white text-stone-800 border-stone-200'}`}>
+            <div className={`w-full max-w-xl rounded-2xl border shadow-xl ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700' : 'bg-white text-stone-800 border-stone-200'}`}>
               <div className={`flex items-center justify-between px-6 py-4 border-b ${darkMode ? 'border-stone-700' : 'border-stone-200/60'}`}>
                 <div className="text-lg font-bold">游戏规则</div>
                 <button
@@ -1366,11 +1366,11 @@ const App: React.FC = () => {
                 </button>
               </div>
               <div className="px-6 py-4 space-y-3 text-sm leading-6">
-                <div>1. 每手棋双方先各自选择落子点并同时亮出。</div>
-                <div>2. 若双方选择相同点，则该手无效，该点成为禁入点。</div>
-                <div>3. 若双方选择不同点，则同时落子后结算无气棋子并提掉。</div>
-                <div>4. 如果提子只包含该回合落下的子，这两个位置成为禁入点。</div>
-                <div>5. 禁入点可作为棋子的气，双方之后不能落子于该点，直到出现不同落子。</div>
+                <div>1. 每手棋双方首先各自选择落子点（允许自尽）并同时亮出。</div>
+                <div>2. 若双方选择了相同的点，则该手无效，该点成为禁入点。</div>
+                <div>3. 若双方选择了不同的点，则该手有效，先将这两子落下，结算所有没有气的棋子标记为提子，然后提掉所有提子。</div>
+                <div>4. 若提子包含本回合所有落子，则落子点变为禁入点。</div>
+                <div>5. 禁入点可以作为棋子的气，双方之后不能再下在该点，直到选择了不同的点。</div>
                 <div>6. 无贴目。</div>
               </div>
               <div className="px-6 pb-5">

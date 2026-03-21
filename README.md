@@ -69,7 +69,7 @@ npm run build
 ## 项目结构
 
 ```
-同步围棋/
+SyncGo/
 ├── App.tsx           # 主应用组件
 ├── components/
 │   └── Goban.tsx     # 棋盘组件

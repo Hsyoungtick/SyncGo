@@ -1,5 +1,5 @@
 {
-  "name": "synchronous-go-server",
+  "name": "sync-go-server",
   "version": "1.0.0",
   "description": "同步围棋服务端",
   "author": "Hsyoungtick",

@@ -219,6 +219,17 @@ export const resolveTurn = (
     group.forEach(p => nextBoard[p.row][p.col] = Player.None);
   }
 
+  // 6. 最终检查：提子后再次扫描棋盘，提掉所有无气的棋子
+  const finalDeadGroups = findDeadGroups(nextBoard);
+  for (const group of finalDeadGroups.blackGroups) {
+    whiteCapturesDelta += group.length;
+    group.forEach(p => nextBoard[p.row][p.col] = Player.None);
+  }
+  for (const group of finalDeadGroups.whiteGroups) {
+    blackCapturesDelta += group.length;
+    group.forEach(p => nextBoard[p.row][p.col] = Player.None);
+  }
+
   return { newBoard: nextBoard, blackCapturesDelta, whiteCapturesDelta, clashed, clashedPoint };
 };
 

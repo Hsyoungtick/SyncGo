@@ -34,44 +34,17 @@
 - Node.js 18+
 - npm 或 yarn
 
-### 安装依赖
+### 安装与启动
 
 ```bash
-# 前端依赖
+# 安装依赖（会自动安装前后端依赖）
 npm install
 
-# 服务端依赖
-cd server && npm install
-```
-
-### 启动游戏
-
-```bash
-# 同时启动前端和后端
+# 启动游戏
 npm run dev
 ```
 
 访问 <http://localhost:3000> 开始游戏
-
-### 隧道模式（在线对战）
-
-使用 cpolar 等内网穿透工具实现公网访问：
-
-1. 安装 cpolar 并启动隧道（前端和后端各一个）
-2. 创建 `.env` 文件：
-
-```env
-VITE_SOCKET_SERVER=https://your-backend-tunnel.cpolar.top
-VITE_FRONTEND_URL=https://your-frontend-tunnel.cpolar.top
-```
-
-3. 启动游戏：
-
-```bash
-npm run dev
-```
-
-4. 将 `VITE_FRONTEND_URL` 分享给对手即可开始对战
 
 ### 构建生产版本
 
@@ -102,9 +75,24 @@ SyncGo/
 
 ## 部署方案
 
-### 推荐部署方式：Vercel + Railway
+### 方案一：隧道模式（本地临时对战）
 
-由于 Vercel 不支持 WebSocket，建议采用前后端分离部署方案：
+适合临时邀请朋友对战，无需云服务器：
+
+1. 安装内网穿透工具（如 [cpolar](https://www.cpolar.com/)）
+2. 创建两个隧道（前端 3000 端口，后端 3001 端口）
+3. 创建 `.env` 文件：
+
+```env
+VITE_SOCKET_SERVER=https://your-backend-tunnel.cpolar.top
+VITE_FRONTEND_URL=https://your-frontend-tunnel.cpolar.top
+```
+
+4. 启动游戏并将前端地址分享给对手
+
+### 方案二：Vercel + Railway（生产环境）
+
+适合长期部署，提供稳定的公网访问：
 
 #### 1. 部署后端到 Railway
 
@@ -133,12 +121,6 @@ SyncGo/
 - **在 Railway 中**：添加 `FRONTEND_URL` 环境变量，值为你的 Vercel 前端地址
 - **在 Vercel 中**：确保 `VITE_SERVER_URL` 环境变量正确设置
 
-#### 4. 测试部署
-
-- 访问 Vercel 生成的前端 URL
-- 创建游戏房间，测试网络对战功能
-- 邀请朋友加入房间，测试实时通信
-
 ### 其他部署选项
 
 | 平台               | WebSocket 支持 | 免费额度              | 推荐度  |
@@ -146,4 +128,3 @@ SyncGo/
 | **Zeabur**       | ✅            | 500MB 存储 + 1GB 流量 | ⭐⭐⭐⭐ |
 | **Render**       | ✅            | 750小时/月           | ⭐⭐⭐  |
 | **DigitalOcean** | ✅            | $6/月              | ⭐⭐⭐⭐ |
-

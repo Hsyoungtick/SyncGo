@@ -70,7 +70,7 @@ const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInterac
   }, []);
 
   return (
-    <div className="relative aspect-square w-full h-full bg-[#eecfa1] shadow-xl rounded-sm p-1 sm:p-1 select-none">
+    <div className="relative aspect-square w-full h-full bg-[#eecfa1] shadow-xl rounded-sm p-0.5 sm:p-1 select-none touch-none">
       <div className="relative w-full h-full">
         <svg
           className="absolute inset-0 w-full h-full pointer-events-none z-0"
@@ -113,12 +113,12 @@ const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInterac
               return (
                 <div
                   key={`${r}-${c}`}
-                  className={`relative flex items-center justify-center ${canClick ? 'group' : ''}`}
+                  className={`relative flex items-center justify-center goban-cell ${canClick ? 'cursor-pointer active:bg-black/5' : ''}`}
                   onClick={() => canClick && onCellClick({ row: r, col: c })}
                 >
                   {canClick && !isTemp && (
                     <div 
-                      className={`w-[90%] h-[90%] rounded-full opacity-0 group-hover:opacity-40 ${currentPlayer === Player.Black ? 'bg-black' : 'bg-white border border-stone-300'}`}
+                      className={`w-[90%] h-[90%] rounded-full opacity-0 group-hover:opacity-40 max-md:active:opacity-30 ${currentPlayer === Player.Black ? 'bg-black' : 'bg-white border border-stone-300'}`}
                     />
                   )}
 

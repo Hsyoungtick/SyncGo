@@ -2,9 +2,45 @@
 
 body {
   font-family: 'Noto Sans SC', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 button:active:not(:disabled) {
   transform: scale(0.97);
   transition: transform 0.1s ease;
+}
+
+@media (max-width: 768px) {
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .mobile-safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .goban-cell:active {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-area-bottom {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
 }

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+.try-mode-border {
+  outline: 4px solid rgba(251, 191, 36, 0.8);
+  outline-offset: -4px;
+}
+
 body {
   font-family: 'Noto Sans SC', sans-serif;
   -webkit-tap-highlight-color: transparent;

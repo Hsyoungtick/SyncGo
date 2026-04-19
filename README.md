@@ -46,19 +46,32 @@ cd server && npm install
 
 ### 启动游戏
 
-```powershell
-# Windows: 使用启动脚本
-./start.ps1
-
-# 或手动启动
-# 终端1 - 启动服务端
-cd server && node index.js
-
-# 终端2 - 启动前端
+```bash
+# 同时启动前端和后端
 npm run dev
 ```
 
 访问 <http://localhost:3000> 开始游戏
+
+### 隧道模式（在线对战）
+
+使用 cpolar 等内网穿透工具实现公网访问：
+
+1. 安装 cpolar 并启动隧道（前端和后端各一个）
+2. 创建 `.env` 文件：
+
+```env
+VITE_SOCKET_SERVER=https://your-backend-tunnel.cpolar.top
+VITE_FRONTEND_URL=https://your-frontend-tunnel.cpolar.top
+```
+
+3. 启动游戏：
+
+```bash
+npm run dev
+```
+
+4. 将 `VITE_FRONTEND_URL` 分享给对手即可开始对战
 
 ### 构建生产版本
 
@@ -72,7 +85,8 @@ npm run build
 SyncGo/
 ├── App.tsx           # 主应用组件
 ├── components/
-│   └── Goban.tsx     # 棋盘组件
+│   ├── Goban.tsx     # 棋盘组件
+│   └── LeftPanel.tsx # 左侧面板组件
 ├── utils/
 │   └── gameLogic.ts  # 游戏逻辑
 ├── server/
@@ -83,7 +97,7 @@ SyncGo/
 ├── types.ts          # TypeScript 类型定义
 ├── constants.ts      # 常量配置
 ├── vercel.json       # Vercel 部署配置
-└── start.ps1         # Windows 启动脚本
+└── .env.example      # 环境变量示例
 ```
 
 ## 部署方案

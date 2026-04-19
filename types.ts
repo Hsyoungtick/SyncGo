@@ -38,7 +38,27 @@ export interface MoveRecord {
 export enum NetworkRole {
     None = 'NONE',
     Host = 'HOST',
-    Client = 'CLIENT'
+    Client = 'CLIENT',
+    Spectator = 'SPECTATOR'
+}
+
+export interface RoomInfo {
+  roomId: string;
+  playerCount: number;
+  spectatorCount: number;
+  isFull: boolean;
+  hasDisconnected: boolean;
+  wasInRoom?: boolean;
+  blackUserName?: string;
+  whiteUserName?: string;
+}
+
+export interface RoomPlayerInfo {
+  blackUserId?: string;
+  blackUserName?: string;
+  whiteUserId?: string;
+  whiteUserName?: string;
+  spectators: Array<{ userId: string; userName: string }>;
 }
 
 export type NetworkPacket = 

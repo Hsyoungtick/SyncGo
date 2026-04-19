@@ -113,7 +113,7 @@ const Goban: React.FC<GobanProps> = ({ board, onCellClick, tempMarker, isInterac
               return (
                 <div
                   key={`${r}-${c}`}
-                  className={`relative flex items-center justify-center goban-cell ${canClick ? 'cursor-pointer active:bg-black/5' : ''}`}
+                  className={`relative flex items-center justify-center goban-cell group ${canClick ? 'cursor-pointer' : ''}`}
                   onClick={() => canClick && onCellClick({ row: r, col: c })}
                 >
                   {canClick && !isTemp && (

@@ -28,5 +28,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Cloudflare
+.wrangler/
+.dev.vars
+
 # Trae IDE
 metadata.json

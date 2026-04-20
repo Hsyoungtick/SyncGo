@@ -24,7 +24,9 @@
 
 - **前端**: React 19 + TypeScript + Tailwind CSS v4
 - **构建工具**: Vite 6
-- **实时通信**: Socket.io
+- **实时通信**: WebRTC P2P + HTTP 轮询信令
+- **部署**: Cloudflare Pages + Cloudflare Workers
+- **数据库**: Cloudflare D1
 - **图标**: Lucide React
 
 ## 快速开始
@@ -37,10 +39,10 @@
 ### 安装与启动
 
 ```bash
-# 安装依赖（会自动安装前后端依赖）
+# 安装依赖
 npm install
 
-# 启动游戏
+# 启动开发服务器
 npm run dev
 ```
 
@@ -56,75 +58,99 @@ npm run build
 
 ```
 SyncGo/
-├── App.tsx           # 主应用组件
+├── App.tsx              # 主应用组件
 ├── components/
-│   ├── Goban.tsx     # 棋盘组件
-│   └── LeftPanel.tsx # 左侧面板组件
+│   ├── Goban.tsx        # 棋盘组件
+│   └── LeftPanel.tsx    # 左侧面板组件
+├── hooks/
+│   └── useNetwork.ts    # 网络对战 Hook
+├── lib/
+│   ├── signaling.ts     # 信令服务器 API 客户端
+│   └── webrtc.ts        # WebRTC 连接管理
 ├── utils/
-│   └── gameLogic.ts  # 游戏逻辑
-├── server/
-│   ├── index.js      # Socket.io 服务端
-│   └── package.json  # 服务端依赖
+│   └── gameLogic.ts     # 游戏逻辑
+├── worker/
+│   ├── index.ts         # Cloudflare Workers 信令服务器
+│   ├── wrangler.toml    # Workers 配置
+│   └── migrations/      # D1 数据库迁移
 ├── public/
-│   └── favicon.svg   # 网站图标
-├── types.ts          # TypeScript 类型定义
-├── constants.ts      # 常量配置
-├── vercel.json       # Vercel 部署配置
-└── .env.example      # 环境变量示例
+│   └── favicon.svg      # 网站图标
+├── types.ts             # TypeScript 类型定义
+├── constants.ts         # 常量配置
+└── .env.example         # 环境变量示例
 ```
 
 ## 部署方案
 
-### 方案一：隧道模式（本地临时对战）
+### 前置要求
 
-适合临时邀请朋友对战，无需云服务器：
+- Cloudflare 账号
+- 已安装 Wrangler CLI (`npm install -g wrangler`)
 
-1. 安装内网穿透工具（如 [cpolar](https://www.cpolar.com/)）
-2. 创建两个隧道（前端 3000 端口，后端 3001 端口）
-3. 创建 `.env` 文件：
+### 1. 部署信令服务器（Cloudflare Workers）
 
-```env
-VITE_SOCKET_SERVER=https://your-backend-tunnel.cpolar.top
-VITE_FRONTEND_URL=https://your-frontend-tunnel.cpolar.top
+```bash
+# 登录 Cloudflare
+wrangler login
+
+# 创建 D1 数据库
+wrangler d1 create syncgo-db
+
+# 在 worker/wrangler.toml 中更新 database_id
+
+# 执行数据库迁移
+wrangler d1 execute syncgo-db --file=worker/migrations/add_heartbeat.sql
+
+# 部署 Worker
+cd worker && wrangler deploy
 ```
 
-4. 启动游戏并将前端地址分享给对手
+部署完成后，记录 Worker 的 URL（如 `https://syncgob.your-subdomain.workers.dev`）
 
-### 方案二：Vercel + Railway（生产环境）
+### 2. 部署前端（Cloudflare Pages）
 
-适合长期部署，提供稳定的公网访问：
+```bash
+# 创建 .env 文件
+echo "VITE_SIGNALING_URL=https://your-worker.workers.dev" > .env
 
-#### 1. 部署后端到 Railway
+# 构建并部署
+npm run deploy
+```
 
-1. 访问 [Railway.app](https://railway.app) 并登录
-2. 创建新项目，选择 "Deploy from GitHub repo"
-3. 选择你的仓库，设置：
-   - **Root Directory**: `server`
-   - **Build Command**: `npm install`
-   - **Start Command**: `node index.js`
-4. 部署完成后，获取生成的后端 URL（如 `https://syncgo.up.railway.app`）
+或者在 Cloudflare Dashboard 中：
+1. 连接 GitHub 仓库
+2. 设置构建命令: `npm run build`
+3. 设置输出目录: `dist`
+4. 添加环境变量: `VITE_SIGNALING_URL`
 
-#### 2. 部署前端到 Vercel
+### 本地开发配置
 
-1. 访问 [Vercel](https://vercel.com) 并登录
-2. 导入你的仓库
-3. 配置项目：
-   - **Framework Preset**: Vite
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-4. 添加环境变量：
-   - `VITE_SERVER_URL` = 你的 Railway 后端 URL
-5. 点击 "Deploy"
+创建 `.env` 文件：
 
-#### 3. 配置环境变量
+```env
+# Cloudflare Workers 信令服务地址
+VITE_SIGNALING_URL=https://your-worker.workers.dev
+```
 
-- **在 Railway 中**：添加 `FRONTEND_URL` 环境变量，值为你的 Vercel 前端地址
-- **在 Vercel 中**：确保 `VITE_SERVER_URL` 环境变量正确设置
+## 架构说明
 
-### 其他部署选项
+```
+┌─────────────┐                    ┌─────────────┐
+│   Player A  │◄──── WebRTC P2P ───►│   Player B  │
+└──────┬──────┘                    └──────┬──────┘
+       │                                  │
+       │ HTTP 轮询（SDP/ICE 交换）        │
+       ▼                                  ▼
+┌─────────────────────────────────────────────────┐
+│          Cloudflare Workers 信令服务器           │
+│                   + D1 数据库                    │
+└─────────────────────────────────────────────────┘
+```
 
-| 平台               | WebSocket 支持 | 免费额度              | 推荐度  |
-| ---------------- | ------------ | ----------------- | ---- |
-| **Zeabur**       | ✅            | 500MB 存储 + 1GB 流量 | ⭐⭐⭐⭐ |
-| **Render**       | ✅            | 750小时/月           | ⭐⭐⭐  |
-| **DigitalOcean** | ✅            | $6/月              | ⭐⭐⭐⭐ |
+- **WebRTC P2P**: 游戏数据直接在玩家之间传输，低延迟
+- **HTTP 轮询信令**: 用于交换 SDP Offer/Answer 和 ICE Candidates
+- **D1 数据库**: 存储房间状态和信令数据
+
+## 许可证
+
+[MIT](LICENSE)

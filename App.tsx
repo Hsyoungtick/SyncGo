@@ -4,22 +4,7 @@ import { createEmptyBoard, resolveTurn, calculateTerritory } from './utils/gameL
 import Goban from './components/Goban';
 import LeftPanel from './components/LeftPanel';
 import { RotateCcw, EyeOff, Play, ChartBar, X, Check, Download, Upload, Wifi, Copy, Link, Flag, XCircle, WifiOff, Zap, HelpCircle, Sun, Moon, Github, Monitor, Users, DoorOpen, Pencil } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
-
-const generateUserName = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let result = '';
-  for (let i = 0; i < 4; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
-
-const generateUserId = () => {
-  return 'user_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-};
-
-const SOCKET_SERVER = import.meta.env.VITE_SOCKET_SERVER || import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:3001`;
+import { useNetwork, GameState } from './hooks/useNetwork';
 
 const App: React.FC = () => {
   // Game State
@@ -48,31 +33,87 @@ const App: React.FC = () => {
   const [estimatedScore, setEstimatedScore] = useState<{ black: number, white: number } | null>(null);
 
   // --- Network State ---
-  const [netRole, setNetRole] = useState<NetworkRole>(NetworkRole.None);
-  const [roomId, setRoomId] = useState<string>('');
-  const [connStatus, setConnStatus] = useState<'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'WAITING'>('DISCONNECTED');
   const [joinInputId, setJoinInputId] = useState('');
-  const [myMoveCommitted, setMyMoveCommitted] = useState(false);
-  const [opponentCommitted, setOpponentCommitted] = useState(false);
-  const [endGameRequested, setEndGameRequested] = useState(false);
-  const [opponentEndGameRequested, setOpponentEndGameRequested] = useState(false);
   const [selectedCreateRole, setSelectedCreateRole] = useState<'black' | 'white'>('black');
-  const [opponentDisconnected, setOpponentDisconnected] = useState(false);
   const [reconnectCountdown, setReconnectCountdown] = useState(60);
   const [quickMode, setQuickMode] = useState(() => localStorage.getItem('quickMode') === 'true');
   const [showRules, setShowRules] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('syncgo_theme') === 'dark');
-  const [roomList, setRoomList] = useState<RoomInfo[]>([]);
   const [roomPlayerInfo, setRoomPlayerInfo] = useState<RoomPlayerInfo | undefined>(undefined);
-  const [userName, setUserName] = useState(() => localStorage.getItem('syncgo_username') || generateUserName());
-  const [userId] = useState(() => localStorage.getItem('syncgo_userid') || (() => {
-    const newId = generateUserId();
-    localStorage.setItem('syncgo_userid', newId);
-    return newId;
-  })());
 
-  // Socket ref
-  const socketRef = useRef<Socket | null>(null);
+  // WebRTC Network Hook
+  const [networkState, networkActions] = useNetwork({
+    onResolveTurn: (blackMove, whiteMove) => {
+      performResolution(blackMove, whiteMove);
+    },
+    onFullSync: (gameState: GameState) => {
+      if (gameState) {
+        setBoard(gameState.board);
+        setCaptures(gameState.captures);
+        setTurnCount(gameState.turn);
+        setHistory(gameState.history);
+        setLastClash(gameState.lastClash);
+        setPhase(GamePhase.WhiteInput);
+        setBlackSelection(null);
+        setWhiteSelection(null);
+      }
+    },
+    onGameRestarted: () => {
+      resetGameLocal();
+    },
+    onGameEnded: (gameState?: GameState) => {
+      const boardToUse = gameState?.board || boardRef.current;
+      const { black, white } = calculateTerritory(boardToUse);
+      setScores({ black, white });
+      setPhase(GamePhase.GameOver);
+    },
+    onOpponentReconnected: () => {
+      setReconnectCountdown(60);
+    },
+    onRoomUpdated: (roomInfo) => {
+      const isHost = roomInfo.amIHost;
+      
+      setRoomPlayerInfo({
+        blackUserId: roomInfo.hostRole === 'black' ? (isHost ? userId : undefined) : (isHost ? undefined : userId),
+        blackUserName: roomInfo.hostRole === 'black' ? roomInfo.hostName : roomInfo.guestName,
+        whiteUserId: roomInfo.hostRole === 'white' ? (isHost ? userId : undefined) : (isHost ? undefined : userId),
+        whiteUserName: roomInfo.hostRole === 'white' ? roomInfo.hostName : roomInfo.guestName,
+        spectators: []
+      });
+    }
+  });
+
+  const {
+    netRole,
+    connStatus,
+    roomId,
+    myMoveCommitted,
+    opponentCommitted,
+    endGameRequested,
+    opponentEndGameRequested,
+    opponentDisconnected,
+    roomList,
+    userName,
+    userId,
+    hostRole
+  } = networkState;
+
+  const {
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    commitMove,
+    cancelMove,
+    resolveTurn: resolveTurnNetwork,
+    requestEndGame,
+    cancelEndGame,
+    agreeEndGame,
+    restartGame,
+    loadGame: loadGameNetwork,
+    setUserName,
+    refreshRoomList,
+    reconnect
+  } = networkActions;
 
   // Save quickMode to localStorage
   useEffect(() => {
@@ -87,15 +128,48 @@ const App: React.FC = () => {
     localStorage.setItem('syncgo_username', userName);
   }, [userName]);
 
+  useEffect(() => {
+    if (netRole !== NetworkRole.None && roomId) {
+      const savedState = {
+        board,
+        captures,
+        turn: turnCount,
+        history,
+        lastClash,
+        roomId,
+        netRole,
+        hostRole
+      };
+      localStorage.setItem('syncgo_game_state', JSON.stringify(savedState));
+    }
+  }, [board, captures, turnCount, history, lastClash, roomId, netRole, hostRole]);
+
+  const clearSavedGameState = useCallback(() => {
+    localStorage.removeItem('syncgo_game_state');
+    localStorage.removeItem('syncgo_room_id');
+  }, []);
+
+  const loadSavedGameState = useCallback((): GameState | null => {
+    const saved = localStorage.getItem('syncgo_game_state');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, []);
+
   const handleSaveName = (newName: string) => {
-    const trimmed = newName.trim().toUpperCase().slice(0, 8);
+    const trimmed = newName.trim();
     if (trimmed.length >= 1) {
       setUserName(trimmed);
     }
   };
 
   const handleUserNameChange = (newName: string) => {
-    const trimmed = newName.trim().toUpperCase().slice(0, 8);
+    const trimmed = newName.trim();
     if (trimmed.length >= 1) {
       setUserName(trimmed);
     }
@@ -130,326 +204,125 @@ const App: React.FC = () => {
   // --- URL Room Detection & Auto Join ---
   useEffect(() => {
     const path = window.location.pathname;
-    const roomIdFromPath = path.slice(1).toUpperCase();
+    const roomIdFromPath = path.slice(1);
 
-    if (roomIdFromPath && roomIdFromPath.length === 6 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
+    if (roomIdFromPath && roomIdFromPath.length === 4 && /^[0-9]+$/.test(roomIdFromPath)) {
       setJoinInputId(roomIdFromPath);
     }
   }, []);
+
+  // --- Auto Reconnect on Page Load (only once) ---
+  const hasAttemptedReconnect = useRef(false);
+  
+  useEffect(() => {
+    if (hasAttemptedReconnect.current) return;
+    hasAttemptedReconnect.current = true;
+    
+    const path = window.location.pathname;
+    const roomIdFromPath = path.slice(1);
+    const isRootPath = !roomIdFromPath || roomIdFromPath.length !== 4 || !/^[0-9]+$/.test(roomIdFromPath);
+    
+    const savedRoomId = localStorage.getItem('syncgo_room_id');
+    const savedGameState = loadSavedGameState();
+    
+    // 如果当前是根路径，清除保存的状态
+    if (isRootPath) {
+      if (savedRoomId || savedGameState) {
+        console.log('[初始化] 检测到根路径，清除保存的状态');
+        clearSavedGameState();
+      }
+      return;
+    }
+    
+    // 如果 URL 有房间号，尝试重连
+    if (savedRoomId && savedGameState) {
+      console.log('[重连] 检测到保存的游戏状态，尝试重连...');
+      
+      reconnect(savedRoomId).then(success => {
+        if (success) {
+          console.log('[重连] 重连成功，恢复游戏状态');
+          setBoard(savedGameState.board);
+          setCaptures(savedGameState.captures);
+          setTurnCount(savedGameState.turn);
+          setHistory(savedGameState.history);
+          setLastClash(savedGameState.lastClash);
+          setPhase(GamePhase.BlackInput);
+        } else {
+          console.log('[重连] 重连失败，清除保存的状态');
+          clearSavedGameState();
+        }
+      });
+    }
+  }, [reconnect, loadSavedGameState, clearSavedGameState]);
 
   // --- Handle Browser Back/Forward ---
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      const roomIdFromPath = path.slice(1).toUpperCase();
+      const roomIdFromPath = path.slice(1);
+      const isRootPath = !roomIdFromPath || roomIdFromPath.length !== 4 || !/^[0-9]+$/.test(roomIdFromPath);
       
-      if (roomIdFromPath && roomIdFromPath.length === 6 && /^[A-Z0-9]+$/.test(roomIdFromPath)) {
-        if (roomIdFromPath !== roomId) {
-          setJoinInputId(roomIdFromPath);
-        }
-      } else {
+      console.log('[popstate] path:', path, 'isRootPath:', isRootPath, 'netRole:', netRole);
+      
+      if (isRootPath) {
+        // 回到根路径，退出房间
         if (netRole !== NetworkRole.None) {
-          socketRef.current?.disconnect();
-          setNetRole(NetworkRole.None);
-          setRoomId('');
-          setConnStatus('DISCONNECTED');
-          setJoinInputId('');
-          setOpponentDisconnected(false);
-          setReconnectCountdown(60);
-          resetGameLocal();
-          setRoomPlayerInfo(undefined);
-          localStorage.removeItem('syncgo_room_id');
-          localStorage.removeItem('syncgo_role');
+          console.log('[popstate] 调用 leaveRoom');
+          leaveRoom();
         }
+        setJoinInputId('');
+        setReconnectCountdown(60);
+        resetGameLocal();
+        setRoomPlayerInfo(undefined);
+        clearSavedGameState();
+      } else if (roomIdFromPath !== roomId) {
+        setJoinInputId(roomIdFromPath);
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [roomId, netRole]);
+  }, [roomId, netRole, leaveRoom]);
 
   // --- Auto Join from URL ---
   useEffect(() => {
-    if (joinInputId && joinInputId.length === 6 && /^[A-Z0-9]+$/.test(joinInputId) && netRole === NetworkRole.None && connStatus === 'DISCONNECTED') {
-      const socket = connectSocket();
-      setConnStatus('CONNECTING');
-
-      socket.emit('join-room', { roomId: joinInputId, userId, userName }, (response: { roomId?: string; role?: string; error?: string; reconnected?: boolean; hasOpponent?: boolean }) => {
-        if (response.error) {
-          console.log('[Socket] 自动加入房间失败:', response.error);
-          setConnStatus('DISCONNECTED');
+    if (joinInputId && joinInputId.length === 4 && /^[0-9]+$/.test(joinInputId) && netRole === NetworkRole.None && connStatus === 'DISCONNECTED') {
+      joinRoom(joinInputId).then(result => {
+        if (result.success) {
+          window.history.pushState({}, '', `/${joinInputId}`);
+        } else {
+          console.log('[WebRTC] 自动加入房间失败:', result.error);
           setJoinInputId('');
           window.history.pushState({}, '', '/');
-          return;
         }
-        console.log('[Socket] 自动加入房间成功', response);
-        setRoomId(response.roomId!);
-        setNetRole(response.role === 'black' ? NetworkRole.Host : (response.role === 'white' ? NetworkRole.Client : NetworkRole.Spectator));
-        setConnStatus(response.reconnected || response.hasOpponent ? 'CONNECTED' : 'WAITING');
-
-        window.history.pushState({}, '', `/${response.roomId}`);
-
-        if (response.reconnected) {
-          socket.emit('request-sync');
-        }
-        
-        // 获取房间信息
-        socket.emit('get-room-info', response.roomId, (info: RoomPlayerInfo) => {
-          setRoomPlayerInfo(info);
-        });
       });
     }
-  }, [joinInputId, netRole, connStatus, userId, userName]);
+  }, [joinInputId, netRole, connStatus, joinRoom]);
 
-  // --- Socket.io Connection ---
-  useEffect(() => {
-    const socket = io(SOCKET_SERVER, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000
-    });
-
-    socket.on('connect', () => {
-      console.log('[Socket] 已连接到服务器');
-      socket.emit('register-user', userId);
-    });
-
-    socket.on('room-list', (rooms: RoomInfo[]) => {
-      console.log('[Socket] 收到房间列表:', rooms);
-      setRoomList(rooms);
-    });
-
-    socketRef.current = socket;
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [userId]);
-
-  const connectSocket = useCallback(() => {
-    if (socketRef.current?.connected) return socketRef.current;
-
-    const socket = io(SOCKET_SERVER, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000
-    });
-
-    socket.on('connect', () => {
-      console.log('[Socket] 已连接到服务器');
-      socket.emit('register-user', userId);
-    });
-
-    socket.on('room-list', (rooms: RoomInfo[]) => {
-      console.log('[Socket] 收到房间列表:', rooms);
-      setRoomList(rooms);
-    });
-
-    socket.on('player-joined', () => {
-      console.log('[Socket] 对手已加入');
-      setConnStatus('CONNECTED');
-    });
-
-    socket.on('opponent-committed', () => {
-      console.log('[Socket] 对手已确认落子');
-      setOpponentCommitted(true);
-    });
-
-    socket.on('opponent-cancelled-move', () => {
-      console.log('[Socket] 对手撤销了落子');
-      setOpponentCommitted(false);
-    });
-
-    socket.on('resolve-turn', (data: { blackMove: Point | null; whiteMove: Point | null }) => {
-      console.log('[Socket] 收到结算指令', data);
-      performResolution(data.blackMove, data.whiteMove);
-    });
-
-    socket.on('full-sync', (gameState: any) => {
-      console.log('[Socket] 收到完整同步');
-      if (gameState) {
-        setBoard(gameState.board);
-        setCaptures(gameState.captures);
-        setTurnCount(gameState.turn);
-        setHistory(gameState.history);
-        setLastClash(gameState.lastClash);
-        setPhase(GamePhase.WhiteInput);
-        setBlackSelection(null);
-        setWhiteSelection(null);
-        setMyMoveCommitted(false);
-        setOpponentCommitted(false);
-      }
-    });
-
-    socket.on('game-restarted', () => {
-      console.log('[Socket] 游戏已重置');
-      resetGameLocal();
-    });
-
-    socket.on('opponent-disconnected', (data: { canReconnect: boolean }) => {
-      console.log('[Socket] 对手已断开', data);
-      if (data.canReconnect) {
-        setOpponentDisconnected(true);
-        setReconnectCountdown(60);
-      } else {
-        setConnStatus('DISCONNECTED');
-        setNetRole(NetworkRole.None);
-        setRoomId('');
-        resetGameLocal();
-      }
-    });
-
-    socket.on('opponent-reconnected', () => {
-      console.log('[Socket] 对手已重连');
-      setOpponentDisconnected(false);
-      setReconnectCountdown(60);
-    });
-
-    socket.on('opponent-reconnect-timeout', () => {
-      console.log('[Socket] 等待重连超时');
-      setConnStatus('DISCONNECTED');
-      setNetRole(NetworkRole.None);
-      setRoomId('');
-      setJoinInputId('');
-      setOpponentDisconnected(false);
-      resetGameLocal();
-      window.history.pushState({}, '', '/');
-    });
-
-    socket.on('opponent-requested-end', () => {
-      console.log('[Socket] 对手请求结束游戏');
-      setOpponentEndGameRequested(true);
-    });
-
-    socket.on('end-game-cancelled', () => {
-      console.log('[Socket] 结束游戏请求已取消');
-      setOpponentEndGameRequested(false);
-      setEndGameRequested(false);
-    });
-
-    socket.on('end-game-rejected', () => {
-      console.log('[Socket] 结束游戏请求被拒绝');
-      alert('对方拒绝了结束游戏请求');
-      setEndGameRequested(false);
-    });
-
-    socket.on('game-ended', (data: { gameState?: { board: BoardState; captures: { black: number; white: number } } }) => {
-      console.log('[Socket] 游戏结束');
-      const boardToUse = data.gameState?.board || boardRef.current;
-      const { black, white } = calculateTerritory(boardToUse);
-      setScores({ black, white });
-      setPhase(GamePhase.GameOver);
-    });
-
-    socketRef.current = socket;
-    return socket;
-  }, []);
-
-  const createRoom = useCallback((role: 'black' | 'white' = 'black') => {
-    const socket = connectSocket();
-    setConnStatus('CONNECTING');
-
-    socket.emit('create-room', { role, userId, userName }, (response: { roomId: string; role: string }) => {
-      console.log('[Socket] 创建房间成功', response);
-      setRoomId(response.roomId);
-      setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
-      setConnStatus('WAITING');
-      copyRoomId(response.roomId);
-
-      // 保存房间信息到 localStorage
-      localStorage.setItem('syncgo_room_id', response.roomId);
-      localStorage.setItem('syncgo_role', response.role);
-
-      window.history.pushState({}, '', `/${response.roomId}`);
-      
-      // 获取房间信息
-      socket.emit('get-room-info', response.roomId, (info: RoomPlayerInfo) => {
-        setRoomPlayerInfo(info);
-      });
-    });
-  }, [connectSocket, userId, userName]);
+  const handleCreateRoom = useCallback(async (role: 'black' | 'white' = 'black') => {
+    setSelectedCreateRole(role);
+    const result = await createRoom(role);
+    
+    if (result?.roomId) {
+      copyRoomId(result.roomId);
+      localStorage.setItem('syncgo_room_id', result.roomId);
+      window.history.pushState({}, '', `/${result.roomId}`);
+    }
+  }, [createRoom, userId, userName]);
 
   const spectateRoom = useCallback(() => {
-    if (!joinInputId) return;
-    const socket = connectSocket();
-    setConnStatus('CONNECTING');
-
-    socket.emit('spectate-room', { roomId: joinInputId, userId, userName }, (response: { roomId?: string; role?: string; error?: string }) => {
-      if (response.error) {
-        console.log('[Socket] 观战房间失败:', response.error);
-        setConnStatus('DISCONNECTED');
-        return;
-      }
-      console.log('[Socket] 观战房间成功', response);
-      setRoomId(response.roomId!);
-      setNetRole(NetworkRole.Spectator);
-      setConnStatus('CONNECTED');
-
-      window.history.pushState({}, '', `/${response.roomId}`);
-      
-      // 获取房间信息
-      socket.emit('get-room-info', response.roomId, (info: RoomPlayerInfo) => {
-        setRoomPlayerInfo(info);
-      });
-    });
-  }, [connectSocket, joinInputId, userId, userName]);
-
-  const takeSeat = useCallback((role: 'black' | 'white') => {
-    const socket = socketRef.current;
-    if (!socket || !roomId) return;
-
-    socket.emit('take-seat', { role }, (response: { role?: string; error?: string }) => {
-      if (response.error) {
-        console.log('[Socket] 上座失败:', response.error);
-        return;
-      }
-      console.log('[Socket] 上座成功', response);
-      setNetRole(response.role === 'black' ? NetworkRole.Host : NetworkRole.Client);
-      setBlackSelection(null);
-      setWhiteSelection(null);
-      setMyMoveCommitted(false);
-      setOpponentCommitted(false);
-      
-      // 获取房间信息
-      socket.emit('get-room-info', roomId, (info: RoomPlayerInfo) => {
-        setRoomPlayerInfo(info);
-      });
-    });
-  }, [roomId]);
-
-  const leaveSeat = useCallback(() => {
-    const socket = socketRef.current;
-    if (!socket || !roomId) return;
-
-    socket.emit('leave-seat', (response: { role?: string; error?: string }) => {
-      if (response.error) {
-        console.log('[Socket] 离座失败:', response.error);
-        return;
-      }
-      console.log('[Socket] 离座成功', response);
-      setNetRole(NetworkRole.Spectator);
-      
-      // 获取房间信息
-      socket.emit('get-room-info', roomId, (info: RoomPlayerInfo) => {
-        setRoomPlayerInfo(info);
-      });
-    });
-  }, [roomId]);
+    // WebRTC 模式下暂不支持观战
+    console.log('[WebRTC] 观战功能暂不支持');
+  }, []);
 
   const performResolution = useCallback((blackMove: Point | null, whiteMove: Point | null) => {
     setPhase(GamePhase.Resolution);
 
     setTimeout(() => {
-      // Use refs to get latest state values
       const currentBoard = boardRef.current;
       const currentTurnCount = turnCountRef.current;
       const currentCaptures = capturesRef.current;
       const currentHistory = historyRef.current;
-      const currentNetRole = netRoleRef.current;
 
       const { newBoard, blackCapturesDelta, whiteCapturesDelta, clashed, clashedPoint } = resolveTurn(currentBoard, blackMove, whiteMove);
 
@@ -472,20 +345,22 @@ const App: React.FC = () => {
       setPhase(GamePhase.BlackInput);
       setBlackSelection(null);
       setWhiteSelection(null);
-      setMyMoveCommitted(false);
-      setOpponentCommitted(false);
 
-      if (currentNetRole === NetworkRole.Host) {
-        socketRef.current?.emit('sync-state', {
+      // 房主同步游戏状态给对方
+      if (netRole === NetworkRole.Host) {
+        const gameState: GameState = {
           board: newBoard,
           captures: newCaptures,
           turn: currentTurnCount + 1,
           history: newHistory,
           lastClash: clashed ? clashedPoint : null
-        });
+        };
+        loadGameNetwork(gameState);
       }
     }, 500);
-  }, []);
+  }, [netRole, loadGameNetwork]);
+
+  // --- 双方都确认落子后，由 Host 端内部自动结算 ---
 
   // --- Reconnect Countdown ---
   useEffect(() => {
@@ -518,16 +393,12 @@ const App: React.FC = () => {
     setShowEstimation(false);
     setTerritoryMap(null);
     setEstimatedScore(null);
-    setMyMoveCommitted(false);
-    setOpponentCommitted(false);
-    setEndGameRequested(false);
-    setOpponentEndGameRequested(false);
   };
 
   const resetGame = () => {
     resetGameLocal();
-    if (netRole !== NetworkRole.None && socketRef.current) {
-      socketRef.current.emit('restart-game');
+    if (netRole !== NetworkRole.None) {
+      restartGame();
     }
   };
 
@@ -598,9 +469,8 @@ const App: React.FC = () => {
         setBlackSelection(null);
       } else {
         setBlackSelection(p);
-        if (quickMode && socketRef.current) {
-          setMyMoveCommitted(true);
-          socketRef.current.emit('commit-move', { move: p });
+        if (quickMode) {
+          commitMove(p);
         }
       }
     } else if (netRole === NetworkRole.Client) {
@@ -608,9 +478,8 @@ const App: React.FC = () => {
         setWhiteSelection(null);
       } else {
         setWhiteSelection(p);
-        if (quickMode && socketRef.current) {
-          setMyMoveCommitted(true);
-          socketRef.current.emit('commit-move', { move: p });
+        if (quickMode) {
+          commitMove(p);
         }
       }
     }
@@ -670,10 +539,9 @@ const App: React.FC = () => {
       return;
     }
     
-    if (netRole !== NetworkRole.None && socketRef.current) {
-      setMyMoveCommitted(true);
+    if (netRole !== NetworkRole.None) {
       const move = netRole === NetworkRole.Host ? blackSelection : whiteSelection;
-      socketRef.current.emit('commit-move', { move });
+      commitMove(move);
       return;
     }
 
@@ -684,15 +552,14 @@ const App: React.FC = () => {
     }
   };
 
-  const cancelMove = () => {
-    if (netRole !== NetworkRole.None && socketRef.current && myMoveCommitted && !opponentCommitted) {
-      setMyMoveCommitted(false);
+  const handleCancelMove = () => {
+    if (netRole !== NetworkRole.None && myMoveCommitted && !opponentCommitted) {
       if (netRole === NetworkRole.Host) {
         setBlackSelection(null);
       } else {
         setWhiteSelection(null);
       }
-      socketRef.current.emit('cancel-move');
+      cancelMove();
     }
   };
 
@@ -730,14 +597,14 @@ const App: React.FC = () => {
       if (endGameRequested) {
         return;
       }
-      setEndGameRequested(true);
-      socketRef.current?.emit('request-end-game', {
+      const gameState: GameState = {
         board: board,
         captures: captures,
         turn: turnCount,
         history: history,
         lastClash: null
-      });
+      };
+      requestEndGame(gameState);
       return;
     }
     const { black, white } = calculateTerritory(board);
@@ -804,15 +671,15 @@ const App: React.FC = () => {
     setTerritoryMap(null);
     setEstimatedScore(null);
 
-    if (netRole !== NetworkRole.None && socketRef.current) {
-      const gameState = {
+    if (netRole !== NetworkRole.None) {
+      const gameState: GameState = {
         board: currentBoard,
         captures: { black: bCaps, white: wCaps },
         turn: moves.length + 1,
         history: moves,
         lastClash: null
       };
-      socketRef.current.emit('load-game', gameState);
+      loadGameNetwork(gameState);
     }
   };
 
@@ -886,7 +753,7 @@ const App: React.FC = () => {
   };
 
   const themeButtonClass = `w-12 h-12 flex items-center justify-center rounded-xl shadow-md transition-colors border ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'}`;
-  const containerClass = `min-h-screen font-sans flex flex-col mobile-safe-top ${darkMode ? 'bg-stone-900 text-stone-100' : 'bg-stone-100 text-stone-900'}`;
+  const containerClass = `h-screen font-sans flex flex-col mobile-safe-top ${darkMode ? 'bg-stone-900 text-stone-100' : 'bg-stone-100 text-stone-900'}`;
   const cardClass = `rounded-xl shadow-lg p-4 border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-900 border-stone-200'}`;
   const compactCardClass = `rounded-xl shadow-md p-4 border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200'}`;
   const buttonClass = `rounded-xl font-medium shadow-md border transition-colors ${darkMode ? 'bg-stone-900 text-stone-100 border-stone-700 hover:bg-stone-800' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'}`;
@@ -899,10 +766,10 @@ const App: React.FC = () => {
     <div className={containerClass}>
 
       {/* Main Game Area */}
-      <main className="flex-1 flex items-center justify-center p-4 md:p-6">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-4 w-[min(95%,1200px)]">
-          {/* Left Panel - Info & Network */}
-          <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-end">
+      <main className="flex-1 flex items-start justify-center p-0 landscape:p-4 md:landscape:p-6 overflow-y-auto">
+        <div className="flex flex-col landscape:flex-row items-stretch landscape:items-center justify-center gap-3 landscape:gap-4 w-full landscape:min-w-[900px] landscape:max-w-[1200px] landscape:h-full">
+          {/* Left Panel - Info & Network (Desktop: left side) */}
+          <div className="hidden landscape:flex flex-col gap-3 w-48 shrink-0">
             <LeftPanel
               darkMode={darkMode}
               cardClass={cardClass}
@@ -915,34 +782,30 @@ const App: React.FC = () => {
               connStatus={connStatus}
               roomId={roomId}
               copyRoomId={copyRoomId}
-              createRoom={createRoom}
+              createRoom={handleCreateRoom}
               joinInputId={joinInputId}
               setJoinInputId={setJoinInputId}
               roomList={roomList}
-              onExitRoom={() => {
-                socketRef.current?.disconnect();
-                setNetRole(NetworkRole.None);
-                setRoomId('');
-                setConnStatus('DISCONNECTED');
+              onExitRoom={async () => {
+                console.log('[onExitRoom] 开始退出房间, netRole:', netRole);
+                await leaveRoom();
+                console.log('[onExitRoom] leaveRoom 完成');
                 setJoinInputId('');
-                setOpponentDisconnected(false);
                 setReconnectCountdown(60);
                 resetGameLocal();
                 setRoomPlayerInfo(undefined);
-                localStorage.removeItem('syncgo_room_id');
-                localStorage.removeItem('syncgo_role');
+                clearSavedGameState();
                 window.history.pushState({}, '', '/');
+                console.log('[onExitRoom] 退出完成');
               }}
               roomPlayerInfo={roomPlayerInfo}
-              currentUserId={userId}
-              onTakeSeat={takeSeat}
-              onLeaveSeat={leaveSeat}
             />
         </div>
 
         {/* Center - Board */}
-        <div className="flex flex-col items-center gap-3 flex-1 min-w-0">
-          <div className="w-full md:hidden">
+        <div className="flex flex-col items-stretch landscape:items-center justify-center gap-0 landscape:flex-1 landscape:min-w-[500px] landscape:min-h-0 landscape:h-full w-[90%] landscape:w-auto mx-auto">
+          {/* Mobile Status Bar */}
+          <div className="w-full landscape:hidden">
             <div className={darkMode
               ? 'w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300 bg-stone-900 text-stone-100 border border-stone-700 hover:bg-stone-800'
               : `w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300
@@ -956,7 +819,7 @@ const App: React.FC = () => {
             </div>
           </div>
           {/* Board Area */}
-          <div className={`relative aspect-square w-[min(95vw,calc(100vh-280px))] md:w-[min(calc(100vh-180px),600px)] rounded-sm ${tryMode ? 'try-mode-border' : ''}`}>
+          <div className={`relative aspect-square w-full landscape:max-w-none landscape:h-[calc(100vh-160px)] landscape:w-auto my-2 rounded-sm ${tryMode ? 'try-mode-border' : ''}`}>
             <Goban
               board={tryMode ? (tryBoard || board) : board}
               onCellClick={handleCellClick}
@@ -985,12 +848,12 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="w-full md:hidden flex flex-col gap-2 safe-area-bottom">
+          <div className="w-full landscape:hidden flex flex-col gap-2 safe-area-bottom landscape:max-w-none">
             {(phase !== GamePhase.Resolution && phase !== GamePhase.GameOver) && (
               <div className="flex flex-col gap-2 w-full">
                 <div className="flex gap-2">
                   <button
-                    onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
+                    onClick={myMoveCommitted && !opponentCommitted ? handleCancelMove : confirmSelection}
                     disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                     className={`
                     flex-1 h-14 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed border
@@ -1049,19 +912,19 @@ const App: React.FC = () => {
                       className={`flex-1 h-12 flex items-center justify-center gap-2 ${buttonClass}`}
                     >
                       <ChartBar size={18} />
-                      形势判断
+                      形势
                     </button>
                   )}
                   {opponentEndGameRequested ? (
                     <>
                       <button
-                        onClick={() => socketRef.current?.emit('agree-end-game')}
+                        onClick={() => agreeEndGame()}
                         className={`flex-1 h-12 ${buttonClass}`}
                       >
                         同意
                       </button>
                       <button
-                        onClick={() => socketRef.current?.emit('cancel-end-game')}
+                        onClick={() => cancelEndGame()}
                         className={`flex-1 h-12 ${buttonClass}`}
                       >
                         拒绝
@@ -1069,23 +932,33 @@ const App: React.FC = () => {
                     </>
                   ) : endGameRequested ? (
                     <button
-                      onClick={() => {
-                        setEndGameRequested(false);
-                        socketRef.current?.emit('cancel-end-game');
-                      }}
+                      onClick={() => cancelEndGame()}
                       className={`flex-1 h-12 flex items-center justify-center gap-2 ${buttonClass}`}
                     >
                       <XCircle size={18} />
                       取消
                     </button>
                   ) : (
-                    <button
-                      onClick={endGame}
-                      className={`flex-1 h-12 flex items-center justify-center gap-2 ${buttonClass}`}
-                    >
-                      <Flag size={18} />
-                      结束
-                    </button>
+                    <>
+                      <button
+                        onClick={endGame}
+                        className={`flex-1 h-12 flex items-center justify-center gap-2 ${buttonClass}`}
+                      >
+                        <Flag size={18} />
+                        结束
+                      </button>
+                      <button
+                        onClick={toggleTryMode}
+                        className={`flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-medium shadow-md border transition-colors ${
+                          tryMode 
+                            ? 'bg-amber-500 text-white border-amber-500 active:bg-amber-600'
+                            : (darkMode ? 'bg-stone-800 text-stone-100 border-stone-700 active:bg-stone-700' : 'bg-white text-stone-700 border-stone-200 active:bg-stone-100')
+                        }`}
+                      >
+                        <Pencil size={18} />
+                        {tryMode ? '退出' : '试下'}
+                      </button>
+                    </>
                   )}
                 </div>
 
@@ -1150,7 +1023,7 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="w-full md:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="w-full landscape:hidden landscape:max-w-none flex flex-col gap-2">
             <LeftPanel
               darkMode={darkMode}
               cardClass={cardClass}
@@ -1163,32 +1036,27 @@ const App: React.FC = () => {
               connStatus={connStatus}
               roomId={roomId}
               copyRoomId={copyRoomId}
-              createRoom={createRoom}
+              createRoom={handleCreateRoom}
               joinInputId={joinInputId}
               setJoinInputId={setJoinInputId}
               roomList={roomList}
-              onExitRoom={() => {
-                socketRef.current?.disconnect();
-                setNetRole(NetworkRole.None);
-                setRoomId('');
-                setConnStatus('DISCONNECTED');
+              onExitRoom={async () => {
+                console.log('[onExitRoom Mobile] 开始退出房间, netRole:', netRole);
+                await leaveRoom();
+                console.log('[onExitRoom Mobile] leaveRoom 完成');
                 setJoinInputId('');
-                setOpponentDisconnected(false);
                 setReconnectCountdown(60);
                 resetGameLocal();
                 setRoomPlayerInfo(undefined);
-                localStorage.removeItem('syncgo_room_id');
-                localStorage.removeItem('syncgo_role');
+                clearSavedGameState();
                 window.history.pushState({}, '', '/');
+                console.log('[onExitRoom Mobile] 退出完成');
               }}
               isMobile={true}
               roomPlayerInfo={roomPlayerInfo}
-              currentUserId={userId}
-              onTakeSeat={takeSeat}
-              onLeaveSeat={leaveSeat}
             />
           </div>
-          <div className="w-full md:hidden flex gap-2 justify-center mt-2">
+          <div className="w-full landscape:hidden flex gap-2 justify-center mt-2 landscape:max-w-none">
             <button
               onClick={() => setDarkMode(prev => !prev)}
               className={themeButtonClass}
@@ -1225,7 +1093,7 @@ const App: React.FC = () => {
         </div>
         
         {/* Right Panel - Status & Controls (Desktop only) */}
-        <div className="hidden md:flex flex-col gap-3 w-48 shrink-0 items-start">
+        <div className="hidden landscape:flex flex-col gap-3 w-48 shrink-0">
           {/* Status Bar */}
           <div className={darkMode
             ? 'w-full flex items-center justify-center gap-2 p-3 rounded-xl font-semibold shadow-sm transition-colors duration-300 bg-stone-900 text-stone-100 border border-stone-700 hover:bg-stone-800'
@@ -1244,7 +1112,7 @@ const App: React.FC = () => {
             <div className="flex flex-col gap-2 w-full">
               <div className="flex gap-1">
                 <button
-                  onClick={myMoveCommitted && !opponentCommitted ? cancelMove : confirmSelection}
+                  onClick={myMoveCommitted && !opponentCommitted ? handleCancelMove : confirmSelection}
                   disabled={!isInteractive() && !(myMoveCommitted && !opponentCommitted)}
                   className={`
                     flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed border
@@ -1321,13 +1189,13 @@ const App: React.FC = () => {
               {opponentEndGameRequested ? (
                 <div className="flex gap-2 w-full">
                   <button
-                    onClick={() => socketRef.current?.emit('agree-end-game')}
+                    onClick={() => agreeEndGame()}
                     className={`flex-1 p-3 ${buttonClass}`}
                   >
                     同意
                   </button>
                   <button
-                    onClick={() => socketRef.current?.emit('cancel-end-game')}
+                    onClick={() => cancelEndGame()}
                     className={`flex-1 p-3 ${buttonClass}`}
                   >
                     拒绝
@@ -1335,10 +1203,7 @@ const App: React.FC = () => {
                 </div>
               ) : endGameRequested ? (
                 <button
-                  onClick={() => {
-                    setEndGameRequested(false);
-                    socketRef.current?.emit('cancel-end-game');
-                  }}
+                  onClick={() => cancelEndGame()}
                   className={`w-full flex items-center justify-center gap-2 p-3 ${buttonClass}`}
                 >
                   <XCircle size={18} />

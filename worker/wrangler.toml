@@ -1,0 +1,11 @@
+name = "syncgob"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "syncgo-db"
+database_id = "7532c4f7-43f6-49d4-b2da-c6ddafc4778c"
+
+[vars]
+CORS_ALLOW_ORIGIN = "*"

@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 .try-mode-border {
-  outline: 4px solid rgba(251, 191, 36, 0.8);
-  outline-offset: -4px;
+  border: 4px solid rgba(251, 191, 36, 0.9);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
 }
 
 body {

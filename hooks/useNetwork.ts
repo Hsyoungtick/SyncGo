@@ -534,7 +534,21 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
     }
     
     webrtcManager.sendMove(move);
-  }, []);
+    
+    // 检查双方是否都已提交，如果是则触发结算
+    if (opponentMoveRef.current !== null) {
+      const blackMove = myColor === 'black' ? move : opponentMoveRef.current;
+      const whiteMove = myColor === 'white' ? move : opponentMoveRef.current;
+      
+      callbacks.onResolveTurn(blackMove, whiteMove);
+      webrtcManager.sendResolveTurn(blackMove, whiteMove);
+      
+      setMyMoveCommitted(false);
+      setOpponentCommitted(false);
+      opponentMoveRef.current = null;
+      myMoveRef.current = { black: null, white: null };
+    }
+  }, [callbacks]);
 
   const cancelMove = useCallback(() => {
     if (myMoveCommittedLocal && !opponentCommitted) {

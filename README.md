@@ -1,5 +1,7 @@
 # SyncGo
 
+试玩：[https://syncgo.pages.dev](https://syncgo.pages.dev)
+
 ![预览](assets/preview.png)
 
 ## 游戏规则
@@ -25,8 +27,7 @@
 - **前端**: React 19 + TypeScript + Tailwind CSS v4
 - **构建工具**: Vite 6
 - **实时通信**: WebRTC P2P + HTTP 轮询信令
-- **部署**: Cloudflare Pages + Cloudflare Workers
-- **数据库**: Cloudflare D1
+- **部署**: Cloudflare Pages + Cloudflare Workers / Supabase
 - **图标**: Lucide React
 
 ## 快速开始
@@ -69,10 +70,8 @@ SyncGo/
 │   └── webrtc.ts        # WebRTC 连接管理
 ├── utils/
 │   └── gameLogic.ts     # 游戏逻辑
-├── worker/
-│   ├── index.ts         # Cloudflare Workers 信令服务器
-│   ├── wrangler.toml    # Workers 配置
-│   └── migrations/      # D1 数据库迁移
+├── worker/              # Cloudflare Workers 信令服务器
+├── supabase/            # Supabase Edge Functions 信令服务器
 ├── public/
 │   └── favicon.svg      # 网站图标
 ├── types.ts             # TypeScript 类型定义
@@ -82,12 +81,9 @@ SyncGo/
 
 ## 部署方案
 
-### 前置要求
+### 方案一：Cloudflare（推荐）
 
-- Cloudflare 账号
-- 已安装 Wrangler CLI (`npm install -g wrangler`)
-
-### 1. 部署信令服务器（Cloudflare Workers）
+#### 1. 部署信令服务器（Cloudflare Workers）
 
 ```bash
 # 登录 Cloudflare
@@ -105,9 +101,22 @@ wrangler d1 execute syncgo-db --file=worker/migrations/add_heartbeat.sql
 cd worker && wrangler deploy
 ```
 
-部署完成后，记录 Worker 的 URL（如 `https://syncgob.your-subdomain.workers.dev`）
+#### 2. 部署前端（Cloudflare Pages）
 
-### 2. 部署前端（Cloudflare Pages）
+**方式 A：GitHub 自动部署（推荐）**
+
+1. 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/) → Pages
+2. 点击 "Create a project" → "Connect to Git"
+3. 选择你的 GitHub 仓库
+4. 配置构建：
+   - **构建命令**: `npm run build`
+   - **输出目录**: `dist`
+5. 添加环境变量：`VITE_SIGNALING_URL` = 你的 Worker URL
+6. 点击 "Save and Deploy"
+
+之后每次推送到 GitHub，Cloudflare 会自动重新部署。
+
+**方式 B：命令行部署**
 
 ```bash
 # 创建 .env 文件
@@ -117,18 +126,54 @@ echo "VITE_SIGNALING_URL=https://your-worker.workers.dev" > .env
 npm run deploy
 ```
 
-或者在 Cloudflare Dashboard 中：
-1. 连接 GitHub 仓库
-2. 设置构建命令: `npm run build`
-3. 设置输出目录: `dist`
-4. 添加环境变量: `VITE_SIGNALING_URL`
+---
+
+### 方案二：Supabase
+
+当 Cloudflare Workers 额度用完时，可以切换到 Supabase。
+
+#### 1. 创建数据库表
+
+在 Supabase Dashboard 的 SQL Editor 中执行：
+
+```sql
+-- 见 supabase/migrations/001_initial.sql
+```
+
+#### 2. 部署 Edge Function
+
+```bash
+# 安装 Supabase CLI
+npm install -g supabase
+
+# 登录
+supabase login
+
+# 链接项目
+supabase link --project-ref nmdlykofucbojugeggyj
+
+# 部署函数
+supabase functions deploy signaling
+
+# 设置环境变量
+supabase secrets set SUPABASE_URL=https://nmdlykofucbojugeggyj.supabase.co
+supabase secrets set SUPABASE_ANON_KEY=your-anon-key
+```
+
+#### 3. 更新前端环境变量
+
+```env
+VITE_SIGNALING_URL=https://nmdlykofucbojugeggyj.supabase.co/functions/v1/signaling
+```
+
+---
 
 ### 本地开发配置
 
 创建 `.env` 文件：
 
 ```env
-# Cloudflare Workers 信令服务地址
+# 信令服务地址
 VITE_SIGNALING_URL=https://your-worker.workers.dev
 ```
 
@@ -142,14 +187,13 @@ VITE_SIGNALING_URL=https://your-worker.workers.dev
        │ HTTP 轮询（SDP/ICE 交换）        │
        ▼                                  ▼
 ┌─────────────────────────────────────────────────┐
-│          Cloudflare Workers 信令服务器           │
-│                   + D1 数据库                    │
+│              信令服务器                          │
+│  Cloudflare Workers + D1  或  Supabase Edge     │
 └─────────────────────────────────────────────────┘
 ```
 
 - **WebRTC P2P**: 游戏数据直接在玩家之间传输，低延迟
 - **HTTP 轮询信令**: 用于交换 SDP Offer/Answer 和 ICE Candidates
-- **D1 数据库**: 存储房间状态和信令数据
 
 ## 许可证
 

@@ -81,6 +81,12 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
     myMoveCommittedRef.current = val;
   };
   const [opponentCommitted, setOpponentCommitted] = useState(false);
+  const opponentCommittedRef = useRef(false);
+  
+  const setOpponentCommittedWithRef = (val: boolean) => {
+    setOpponentCommitted(val);
+    opponentCommittedRef.current = val;
+  };
   const [endGameRequested, setEndGameRequested] = useState(false);
   const [opponentEndGameRequested, setOpponentEndGameRequested] = useState(false);
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
@@ -154,7 +160,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
   const handleWebRTCMessage = useCallback((message: WebRTCMessage) => {
     switch (message.type) {
       case 'commit-move':
-        setOpponentCommitted(true);
+        setOpponentCommittedWithRef(true);
         opponentMoveRef.current = message.payload as Point | null;
         
         if (myMoveCommittedRef.current && netRoleRef.current === NetworkRole.Host) {
@@ -166,14 +172,14 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
           
           webrtcManager.sendResolveTurn(blackMove, whiteMove);
           setMyMoveCommitted(false);
-          setOpponentCommitted(false);
+          setOpponentCommittedWithRef(false);
           opponentMoveRef.current = null;
           myMoveRef.current = { black: null, white: null };
         }
         break;
 
       case 'cancel-move':
-        setOpponentCommitted(false);
+        setOpponentCommittedWithRef(false);
         opponentMoveRef.current = null;
         break;
 
@@ -181,7 +187,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
         const resolvePayload = message.payload as { blackMove: Point | null; whiteMove: Point | null };
         callbacks.onResolveTurn(resolvePayload.blackMove, resolvePayload.whiteMove);
         setMyMoveCommitted(false);
-        setOpponentCommitted(false);
+        setOpponentCommittedWithRef(false);
         break;
 
       case 'full-sync':
@@ -190,7 +196,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
 
       case 'restart-game':
         setMyMoveCommitted(false);
-        setOpponentCommitted(false);
+        setOpponentCommittedWithRef(false);
         setEndGameRequested(false);
         setOpponentEndGameRequested(false);
         callbacks.onGameRestarted();
@@ -348,7 +354,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
 
   useEffect(() => {
     refreshRoomList();
-    const interval = setInterval(refreshRoomList, 1000);
+    const interval = setInterval(refreshRoomList, 3000);
     return () => clearInterval(interval);
   }, [refreshRoomList]);
 
@@ -514,7 +520,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
     setRoomId('');
     setConnStatus('DISCONNECTED');
     setMyMoveCommitted(false);
-    setOpponentCommitted(false);
+    setOpponentCommittedWithRef(false);
     setEndGameRequested(false);
     setOpponentEndGameRequested(false);
     setOpponentDisconnected(false);
@@ -535,8 +541,8 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
     
     webrtcManager.sendMove(move);
     
-    // 检查双方是否都已提交，如果是则触发结算
-    if (opponentMoveRef.current !== null) {
+    // 检查双方是否都已提交（用 ref 而不是 state，因为 state 更新是异步的）
+    if (opponentCommittedRef.current) {
       const blackMove = myColor === 'black' ? move : opponentMoveRef.current;
       const whiteMove = myColor === 'white' ? move : opponentMoveRef.current;
       
@@ -544,22 +550,22 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
       webrtcManager.sendResolveTurn(blackMove, whiteMove);
       
       setMyMoveCommitted(false);
-      setOpponentCommitted(false);
+      setOpponentCommittedWithRef(false);
       opponentMoveRef.current = null;
       myMoveRef.current = { black: null, white: null };
     }
   }, [callbacks]);
 
   const cancelMove = useCallback(() => {
-    if (myMoveCommittedLocal && !opponentCommitted) {
+    if (myMoveCommittedLocal && !opponentCommittedRef.current) {
       setMyMoveCommitted(false);
       webrtcManager.sendCancelMove();
     }
-  }, [myMoveCommittedLocal, opponentCommitted]);
+  }, [myMoveCommittedLocal]);
 
   const resolveTurn = useCallback((myBlackSelection: Point | null, myWhiteSelection: Point | null) => {
     setMyMoveCommitted(false);
-    setOpponentCommitted(false);
+    setOpponentCommittedWithRef(false);
     
     const currentRole = hostRoleRef.current;
     const blackMove = currentRole === 'black' ? myBlackSelection : opponentMoveRef.current;
@@ -588,7 +594,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
 
   const restartGame = useCallback(() => {
     setMyMoveCommitted(false);
-    setOpponentCommitted(false);
+    setOpponentCommittedWithRef(false);
     setEndGameRequested(false);
     setOpponentEndGameRequested(false);
     webrtcManager.sendRestartGame();
@@ -615,7 +621,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
 
   const resetGameState = useCallback(() => {
     setMyMoveCommitted(false);
-    setOpponentCommitted(false);
+    setOpponentCommittedWithRef(false);
     setEndGameRequested(false);
     setOpponentEndGameRequested(false);
   }, []);

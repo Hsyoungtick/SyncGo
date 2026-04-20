@@ -213,7 +213,7 @@ export function subscribeToRoom(
     } catch (e) {
       // 忽略轮询错误
     }
-  }, 2000);
+  }, 3000);
 
   return {
     unsubscribe: () => {
@@ -241,7 +241,7 @@ export function subscribeToSignaling(
     } catch (e) {
       // 忽略轮询错误
     }
-  }, 1500);
+  }, 2000);
 
   return {
     unsubscribe: () => {

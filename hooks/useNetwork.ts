@@ -11,6 +11,7 @@ import {
   deleteRoom,
   updateRoomStatus,
   subscribeToRoom,
+  subscribeToRoomList,
   getOffer,
   takeOverAsHost,
   sendHeartbeat,
@@ -352,11 +353,27 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
     })));
   }, []);
 
+  const roomListSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+
+  const handleRoomListUpdate = useCallback((rooms: DBRoomInfo[]) => {
+    setRoomList(rooms.map(room => ({
+      roomId: room.roomId,
+      playerCount: (room as any).playerCount ?? 0,
+      spectatorCount: 0,
+      isFull: !!(room as any).isFull,
+      hasDisconnected: false,
+      blackUserName: (room as any).hostRole === 'black' ? (room as any).hostName : (room as any).guestName,
+      whiteUserName: (room as any).hostRole === 'white' ? (room as any).hostName : (room as any).guestName
+    })));
+  }, []);
+
   useEffect(() => {
-    refreshRoomList();
-    const interval = setInterval(refreshRoomList, 3000);
-    return () => clearInterval(interval);
-  }, [refreshRoomList]);
+    roomListSubscriptionRef.current = subscribeToRoomList(handleRoomListUpdate);
+
+    return () => {
+      roomListSubscriptionRef.current?.unsubscribe();
+    };
+  }, [handleRoomListUpdate]);
 
   const createRoom = useCallback(async (role: 'black' | 'white') => {
     setConnStatus('CONNECTING');

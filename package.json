@@ -12,6 +12,7 @@
     "deploy": "vite build && wrangler pages deploy dist --project-name=syncgo"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.104.0",
     "@tailwindcss/vite": "^4.2.1",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",

@@ -1,5 +1,27 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
 const API_BASE = import.meta.env.VITE_SIGNALING_URL || '';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// 从 Edge Functions URL 提取 Supabase 项目 URL
+// 例如: https://xxx.supabase.co/functions/v1/signaling -> https://xxx.supabase.co
+function extractSupabaseUrl(url: string): string | null {
+  const match = url.match(/^(https:\/\/[a-z]+\.supabase\.co)/);
+  return match ? match[1] : null;
+}
+
+const SUPABASE_URL = extractSupabaseUrl(API_BASE);
+
+let supabase: SupabaseClient | null = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
+      },
+    },
+  });
+}
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
@@ -83,6 +105,57 @@ export async function getRoom(roomId: string): Promise<RoomRecord | null> {
 export async function getRoomList(): Promise<RoomInfo[]> {
   const results = await api<RoomInfo[]>('/api/rooms');
   return results || [];
+}
+
+export function subscribeToRoomList(
+  callback: (rooms: RoomInfo[]) => void
+): { unsubscribe: () => void } {
+  if (supabase) {
+    const channel = supabase
+      .channel('room-list')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'rooms',
+        },
+        () => {
+          getRoomList().then(callback);
+        }
+      )
+      .subscribe();
+
+    getRoomList().then(callback);
+
+    return {
+      unsubscribe: () => {
+        supabase?.removeChannel(channel);
+      },
+    };
+  }
+
+  let unsubscribed = false;
+
+  const pollInterval = setInterval(async () => {
+    if (unsubscribed) return;
+
+    try {
+      const rooms = await getRoomList();
+      callback(rooms);
+    } catch (e) {
+      // 忽略轮询错误
+    }
+  }, 3000);
+
+  getRoomList().then(callback);
+
+  return {
+    unsubscribe: () => {
+      unsubscribed = true;
+      clearInterval(pollInterval);
+    },
+  };
 }
 
 export async function joinRoom(
@@ -212,10 +285,49 @@ export async function sendHeartbeat(roomId: string): Promise<void> {
   await api(`/api/rooms/${roomId}/heartbeat`, { method: 'PUT' });
 }
 
+// 使用 Supabase Realtime 订阅房间变化
 export function subscribeToRoom(
   roomId: string,
   callback: (room: RoomRecord | null) => void
 ): { unsubscribe: () => void } {
+  // 如果 Supabase 客户端可用，使用 Realtime
+  if (supabase) {
+    const channel = supabase
+      .channel(`room:${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'rooms',
+          filter: `room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          const data = payload.new as any;
+          callback({
+            roomId: data.room_id,
+            hostId: data.host_id,
+            hostName: data.host_name,
+            hostRole: data.host_role,
+            guestId: data.guest_id,
+            guestName: data.guest_name,
+            status: data.status,
+          });
+        }
+      )
+      .subscribe();
+
+    // 立即获取一次当前状态
+    getRoom(roomId).then(callback);
+
+    return {
+      unsubscribe: () => {
+        supabase?.removeChannel(channel);
+      },
+    };
+  }
+
+  // 回退到轮询模式
   let unsubscribed = false;
 
   const pollInterval = setInterval(async () => {
@@ -228,6 +340,9 @@ export function subscribeToRoom(
       // 忽略轮询错误
     }
   }, 3000);
+
+  // 立即获取一次当前状态
+  getRoom(roomId).then(callback);
 
   return {
     unsubscribe: () => {

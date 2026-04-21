@@ -56,6 +56,7 @@ export class WebRTCManager {
   private lastReceivedTime: number = 0;
   private isReconnecting: boolean = false;
   private waitAnswerId: number = 0;
+  private pendingCandidates: RTCIceCandidateInit[] = [];
 
   constructor() {
     this.handleMessage = this.handleMessage.bind(this);
@@ -74,6 +75,33 @@ export class WebRTCManager {
     if (this.connectionHandler) {
       this.connectionHandler(status);
     }
+  }
+
+  private async addIceCandidateSafe(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!this.peerConnection) return;
+    
+    if (this.peerConnection.remoteDescription) {
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('[WebRTC] 添加 ICE candidate 失败:', e);
+      }
+    } else {
+      this.pendingCandidates.push(candidate);
+    }
+  }
+
+  private async flushPendingCandidates(): Promise<void> {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    
+    for (const candidate of this.pendingCandidates) {
+      try {
+        await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('[WebRTC] 添加缓存的 ICE candidate 失败:', e);
+      }
+    }
+    this.pendingCandidates = [];
   }
 
   private handleMessage(event: MessageEvent): void {
@@ -140,17 +168,18 @@ export class WebRTCManager {
         this.dataChannel = this.peerConnection!.createDataChannel(DATA_CHANNEL_LABEL);
         this.setupDataChannel();
         await this.createOffer();
-        this.waitForAnswerInBackground();
+        this.waitForAnswerInBackground(this.waitAnswerId);
       } else {
         const offer = await getOffer(this.roomId);
         if (!offer) {
           throw new Error('无法获取 offer');
         }
         await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
+        await this.flushPendingCandidates();
         
         const existingCandidates = await getIceCandidates(this.roomId, this.peerId);
         for (const candidate of existingCandidates) {
-          await this.peerConnection!.addIceCandidate(new RTCIceCandidate(candidate));
+          await this.addIceCandidateSafe(candidate);
         }
         
         await this.createAnswer();
@@ -159,9 +188,7 @@ export class WebRTCManager {
           this.roomId,
           this.peerId,
           async (candidate) => {
-            if (this.peerConnection) {
-              await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            }
+            await this.addIceCandidateSafe(candidate);
           }
         );
       }
@@ -244,9 +271,7 @@ export class WebRTCManager {
         this.roomId,
         this.peerId,
         async (candidate) => {
-          if (this.peerConnection) {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-          }
+          await this.addIceCandidateSafe(candidate);
         }
       );
 
@@ -310,10 +335,11 @@ export class WebRTCManager {
       const answer = await getAnswer(this.roomId);
       if (answer) {
         await this.peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
+        await this.flushPendingCandidates();
         
         const candidates = await getIceCandidates(this.roomId, this.peerId);
         for (const candidate of candidates) {
-          await this.peerConnection?.addIceCandidate(new RTCIceCandidate(candidate));
+          await this.addIceCandidateSafe(candidate);
         }
         return;
       }
@@ -362,10 +388,11 @@ export class WebRTCManager {
       }
 
       await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
+      await this.flushPendingCandidates();
 
       const existingCandidates = await getIceCandidates(roomId, this.peerId);
       for (const candidate of existingCandidates) {
-        await this.peerConnection!.addIceCandidate(new RTCIceCandidate(candidate));
+        await this.addIceCandidateSafe(candidate);
       }
 
       await this.createAnswer();
@@ -374,9 +401,7 @@ export class WebRTCManager {
         this.roomId,
         this.peerId,
         async (candidate) => {
-          if (this.peerConnection) {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-          }
+          await this.addIceCandidateSafe(candidate);
         }
       );
 
@@ -478,6 +503,7 @@ export class WebRTCManager {
     this.isHost = false;
     this.reconnectAttempts = 0;
     this.isReconnecting = false;
+    this.pendingCandidates = [];
     
     this.updateStatus('disconnected');
   }

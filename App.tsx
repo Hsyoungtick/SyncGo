@@ -301,12 +301,19 @@ const App: React.FC = () => {
 
   const handleCreateRoom = useCallback(async (role: 'black' | 'white' = 'black') => {
     setSelectedCreateRole(role);
-    const result = await createRoom(role);
-    
-    if (result?.roomId) {
-      copyRoomId(result.roomId);
-      localStorage.setItem('syncgo_room_id', result.roomId);
-      window.history.pushState({}, '', `/${result.roomId}`);
+    try {
+      const result = await createRoom(role);
+      
+      if (result?.roomId) {
+        copyRoomId(result.roomId);
+        localStorage.setItem('syncgo_room_id', result.roomId);
+        window.history.pushState({}, '', `/${result.roomId}`);
+      } else {
+        alert('创建房间失败，请检查网络连接');
+      }
+    } catch (e) {
+      console.error('创建房间错误:', e);
+      alert(`创建房间失败: ${e instanceof Error ? e.message : '未知错误'}`);
     }
   }, [createRoom, userId, userName]);
 

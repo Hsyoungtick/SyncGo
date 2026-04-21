@@ -43,7 +43,7 @@ export interface NetworkState {
 }
 
 export interface NetworkActions {
-  createRoom: (role: 'black' | 'white') => Promise<void>;
+  createRoom: (role: 'black' | 'white') => Promise<{ roomId: string } | null>;
   joinRoom: (roomId: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
   commitMove: (move: Point | null) => void;
@@ -57,7 +57,7 @@ export interface NetworkActions {
   setUserName: (name: string) => void;
   refreshRoomList: () => Promise<void>;
   resetGameState: () => void;
-  reconnect: (savedRoomId: string, savedRole: 'black' | 'white') => Promise<boolean>;
+  reconnect: (savedRoomId: string) => Promise<boolean>;
 }
 
 export interface NetworkCallbacks {
@@ -373,9 +373,9 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
         setConnStatus('WAITING');
 
         callbacks.onRoomUpdated({
-          hostName: result.hostName || userName,
+          hostName: userName,
           guestName: undefined,
-          hostRole: result.role,
+          hostRole: role,
           amIHost: true
         });
 

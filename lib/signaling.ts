@@ -1,15 +1,29 @@
 const API_BASE = import.meta.env.VITE_SIGNALING_URL || '';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
+  
+  const headers: Record<string, string> = { 
+    'Content-Type': 'application/json',
+    ...((options?.headers || {}) as Record<string, string>),
+  };
+  
+  if (SUPABASE_KEY) {
+    headers['apikey'] = SUPABASE_KEY;
+    headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
+  }
+  
   try {
     const response = await fetch(url, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      headers,
     });
 
     if (!response.ok) {
-      console.error(`[信令] ${options?.method || 'GET'} ${path} 失败:`, response.status);
+      const errorText = await response.text();
+      console.error(`[信令] ${options?.method || 'GET'} ${path} 失败 (${response.status}):`, errorText);
+      throw new Error(`API 错误 ${response.status}: ${errorText}`);
     }
 
     return await response.json();

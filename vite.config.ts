@@ -6,21 +6,12 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   
-  const isDev = mode === 'development';
   const signalingUrl = env.VITE_SIGNALING_URL || '';
-  const isLocalDev = isDev && !signalingUrl;
 
   return {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      allowedHosts: ['localhost'],
-      proxy: isLocalDev ? {
-        '/api': {
-          target: 'http://localhost:3001',
-          changeOrigin: true,
-        },
-      } : undefined,
     },
     plugins: [react(), tailwindcss()],
     resolve: {

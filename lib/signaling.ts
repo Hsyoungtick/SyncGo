@@ -1,9 +1,7 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || '';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-const isLocalDev = !SIGNALING_URL;
 
 function extractSupabaseUrl(url: string): string | null {
   const match = url.match(/^(https:\/\/[a-z]+\.supabase\.co)/);
@@ -12,20 +10,16 @@ function extractSupabaseUrl(url: string): string | null {
 
 let supabase: SupabaseClient | null = null;
 
-if (isLocalDev) {
-  console.log('[信令] 本地开发模式，使用代理');
-} else {
-  const supabaseUrl = extractSupabaseUrl(SIGNALING_URL);
-  if (supabaseUrl && SUPABASE_KEY) {
-    supabase = createClient(supabaseUrl, SUPABASE_KEY, {
-      realtime: { params: { eventsPerSecond: 10 } },
-    });
-    console.log('[Realtime] 已初始化, URL:', supabaseUrl);
-  }
+const supabaseUrl = extractSupabaseUrl(SIGNALING_URL);
+if (supabaseUrl && SUPABASE_KEY) {
+  supabase = createClient(supabaseUrl, SUPABASE_KEY, {
+    realtime: { params: { eventsPerSecond: 10 } },
+  });
+  console.log('[Realtime] 已初始化, URL:', supabaseUrl);
 }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = isLocalDev ? path : `${SIGNALING_URL}${path}`;
+  const url = `${SIGNALING_URL}${path}`;
   
   const headers: Record<string, string> = { 
     'Content-Type': 'application/json',
@@ -97,8 +91,6 @@ export async function getRoomList(): Promise<RoomInfo[]> {
 export function subscribeToRoomList(
   callback: (rooms: RoomInfo[]) => void
 ): { unsubscribe: () => void } {
-  console.log('[Realtime] subscribeToRoomList 调用, supabase:', !!supabase);
-  
   if (supabase) {
     console.log('[Realtime] 房间列表使用 Realtime 订阅');
     const channel = supabase
@@ -106,10 +98,7 @@ export function subscribeToRoomList(
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rooms' },
-        (payload) => {
-          console.log('[Realtime] 房间列表变化:', payload);
-          getRoomList().then(callback);
-        }
+        () => getRoomList().then(callback)
       )
       .subscribe((status) => {
         console.log('[Realtime] 房间列表订阅状态:', status);
@@ -125,7 +114,7 @@ export function subscribeToRoomList(
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;
     try { callback(await getRoomList()); } catch {}
-  }, 3000);
+  }, 5000);
 
   getRoomList().then(callback);
 
@@ -169,10 +158,12 @@ export async function getOffer(roomId: string): Promise<RTCSessionDescriptionIni
 }
 
 export async function saveAnswer(roomId: string, answer: RTCSessionDescriptionInit): Promise<void> {
+  console.log('[Signaling] 保存 Answer, roomId:', roomId);
   await api(`/api/rooms/${roomId}/answer`, {
     method: 'PUT',
     body: JSON.stringify({ answer }),
   });
+  console.log('[Signaling] Answer 已保存');
 }
 
 export async function getAnswer(roomId: string): Promise<RTCSessionDescriptionInit | null> {
@@ -184,6 +175,7 @@ export async function saveIceCandidate(
   peerId: string,
   candidate: RTCIceCandidateInit
 ): Promise<void> {
+  console.log('[Signaling] 保存 ICE 候选, roomId:', roomId, 'peerId:', peerId);
   await api(`/api/signaling/${roomId}`, {
     method: 'POST',
     body: JSON.stringify({ peerId, candidate }),
@@ -246,12 +238,14 @@ export function subscribeToRoom(
   callback: (room: RoomRecord | null) => void
 ): { unsubscribe: () => void } {
   if (supabase) {
+    console.log('[Realtime] 订阅房间状态, roomId:', roomId);
     const channel = supabase
       .channel(`room:${roomId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `room_id=eq.${roomId}` },
         (payload) => {
+          console.log('[Realtime] 房间状态变化:', payload);
           const data = payload.new as any;
           callback({
             roomId: data.room_id,
@@ -264,29 +258,161 @@ export function subscribeToRoom(
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] 房间状态订阅状态:', status);
+      });
 
     getRoom(roomId).then(callback);
 
     return { unsubscribe: () => supabase?.removeChannel(channel) };
   }
 
+  console.warn('[Realtime] 房间状态回退到轮询模式');
   let unsubscribed = false;
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;
     try { callback(await getRoom(roomId)); } catch {}
-  }, 3000);
+  }, 5000);
 
   getRoom(roomId).then(callback);
 
   return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
 }
 
-export function subscribeToSignaling(
+export function subscribeToAnswer(
+  roomId: string,
+  callback: (answer: RTCSessionDescriptionInit) => void
+): { unsubscribe: () => void } {
+  if (supabase) {
+    console.log('[Realtime] 订阅 Answer 变化');
+    let lastAnswer: string | null = null;
+    let callbackCalled = false;
+    const channel = supabase
+      .channel(`answer:${roomId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `room_id=eq.${roomId}` },
+        (payload) => {
+          const data = payload.new as any;
+          console.log('[Realtime] rooms 表 UPDATE 事件, guest_answer:', !!data.guest_answer);
+          if (data.guest_answer && !callbackCalled && data.guest_answer !== lastAnswer) {
+            try {
+              const answer = JSON.parse(data.guest_answer);
+              lastAnswer = data.guest_answer;
+              callbackCalled = true;
+              console.log('[Realtime] 收到 Answer');
+              callback(answer);
+            } catch {}
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Answer 订阅状态:', status);
+      });
+
+    return { unsubscribe: () => supabase?.removeChannel(channel) };
+  }
+
+  let unsubscribed = false;
+  let callbackCalled = false;
+  const pollInterval = setInterval(async () => {
+    if (unsubscribed || callbackCalled) return;
+    try {
+      const answer = await getAnswer(roomId);
+      if (answer) {
+        callbackCalled = true;
+        clearInterval(pollInterval);
+        callback(answer);
+      }
+    } catch {}
+  }, 2000);
+
+  return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
+}
+
+export function subscribeToOffer(
+  roomId: string,
+  callback: (offer: RTCSessionDescriptionInit) => void
+): { unsubscribe: () => void } {
+  if (supabase) {
+    console.log('[Realtime] 订阅 Offer 变化');
+    let lastOffer: string | null = null;
+    const channel = supabase
+      .channel(`offer:${roomId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `room_id=eq.${roomId}` },
+        (payload) => {
+          const data = payload.new as any;
+          if (data.host_offer && data.host_offer !== lastOffer) {
+            try {
+              const offer = JSON.parse(data.host_offer);
+              lastOffer = data.host_offer;
+              console.log('[Realtime] 收到新 Offer');
+              callback(offer);
+            } catch {}
+          }
+        }
+      )
+      .subscribe();
+
+    return { unsubscribe: () => supabase?.removeChannel(channel) };
+  }
+
+  let unsubscribed = false;
+  let lastOffer: string | null = null;
+  const pollInterval = setInterval(async () => {
+    if (unsubscribed) return;
+    try {
+      const offer = await getOffer(roomId);
+      if (offer) {
+        const offerStr = JSON.stringify(offer);
+        if (lastOffer && offerStr !== lastOffer) {
+          clearInterval(pollInterval);
+          callback(offer);
+        }
+        lastOffer = offerStr;
+      }
+    } catch {}
+  }, 2000);
+
+  return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
+}
+
+export function subscribeToIceCandidates(
   roomId: string,
   peerId: string,
   callback: (candidate: RTCIceCandidateInit) => void
 ): { unsubscribe: () => void } {
+  if (supabase) {
+    console.log('[Realtime] 订阅 ICE 候选');
+    const channel = supabase
+      .channel(`ice:${roomId}:${peerId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ice_candidates', filter: `room_id=eq.${roomId}` },
+        (payload) => {
+          const data = payload.new as any;
+          console.log('[Realtime] ICE 候选 INSERT 事件, peer_id:', data.peer_id);
+          if (data.peer_id !== peerId && data.candidate) {
+            console.log('[Realtime] 收到 ICE 候选');
+            callback(data.candidate as RTCIceCandidateInit);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] ICE 订阅状态:', status);
+      });
+
+    getIceCandidates(roomId, peerId).then(candidates => {
+      console.log('[Realtime] 初始 ICE 候选数量:', candidates.length);
+      for (const candidate of candidates) callback(candidate);
+    });
+
+    return { unsubscribe: () => supabase?.removeChannel(channel) };
+  }
+
+  console.warn('[Realtime] ICE 候选回退到轮询模式');
   let unsubscribed = false;
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;
@@ -294,7 +420,11 @@ export function subscribeToSignaling(
       const candidates = await getIceCandidates(roomId, peerId);
       for (const candidate of candidates) callback(candidate);
     } catch {}
-  }, 2000);
+  }, 3000);
+
+  getIceCandidates(roomId, peerId).then(candidates => {
+    for (const candidate of candidates) callback(candidate);
+  });
 
   return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
 }

@@ -3,11 +3,11 @@ import {
   saveOffer,
   saveAnswer,
   getOffer,
-  getAnswer,
   saveIceCandidate,
   getIceCandidates,
   clearSignaling,
-  subscribeToSignaling,
+  subscribeToAnswer,
+  subscribeToIceCandidates,
   getRoom
 } from './signaling';
 
@@ -50,13 +50,14 @@ export class WebRTCManager {
   private isHost: boolean = false;
   private messageHandler: MessageHandler | null = null;
   private connectionHandler: ConnectionHandler | null = null;
-  private signalingSubscription: { unsubscribe: () => void } | null = null;
+  private answerSubscription: { unsubscribe: () => void } | null = null;
+  private iceSubscription: { unsubscribe: () => void } | null = null;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private lastReceivedTime: number = 0;
   private isReconnecting: boolean = false;
-  private waitAnswerId: number = 0;
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  private answerReceived: boolean = false;
 
   constructor() {
     this.handleMessage = this.handleMessage.bind(this);
@@ -168,7 +169,7 @@ export class WebRTCManager {
         this.dataChannel = this.peerConnection!.createDataChannel(DATA_CHANNEL_LABEL);
         this.setupDataChannel();
         await this.createOffer();
-        this.waitForAnswerInBackground(this.waitAnswerId);
+        this.subscribeToAnswer();
       } else {
         const offer = await getOffer(this.roomId);
         if (!offer) {
@@ -177,20 +178,9 @@ export class WebRTCManager {
         await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
         await this.flushPendingCandidates();
         
-        const existingCandidates = await getIceCandidates(this.roomId, this.peerId);
-        for (const candidate of existingCandidates) {
-          await this.addIceCandidateSafe(candidate);
-        }
-        
         await this.createAnswer();
         
-        this.signalingSubscription = subscribeToSignaling(
-          this.roomId,
-          this.peerId,
-          async (candidate) => {
-            await this.addIceCandidateSafe(candidate);
-          }
-        );
+        this.subscribeToIce();
       }
     } catch (error) {
       console.error('[WebRTC] 重连失败:', error);
@@ -205,6 +195,7 @@ export class WebRTCManager {
 
     this.peerConnection.onicecandidate = async (event) => {
       if (event.candidate && this.roomId && this.peerId) {
+        console.log('[WebRTC] 收集到 ICE 候选:', event.candidate.type);
         await saveIceCandidate(this.roomId, this.peerId, event.candidate.toJSON());
       }
     };
@@ -245,8 +236,7 @@ export class WebRTCManager {
     this.roomId = roomId;
     this.peerId = peerId;
     this.isHost = true;
-    this.waitAnswerId++;
-    const currentWaitId = this.waitAnswerId;
+    this.answerReceived = false;
 
     try {
       this.updateStatus('connecting');
@@ -267,21 +257,57 @@ export class WebRTCManager {
 
       await this.createOffer();
 
-      this.signalingSubscription = subscribeToSignaling(
-        this.roomId,
-        this.peerId,
-        async (candidate) => {
-          await this.addIceCandidateSafe(candidate);
-        }
-      );
-
-      this.waitForAnswerInBackground(currentWaitId);
+      this.subscribeToIce();
+      this.subscribeToAnswer();
 
       return { success: true };
     } catch (error) {
       console.error('[WebRTC] 创建房间失败:', error);
       return { success: false, error: String(error) };
     }
+  }
+
+  private subscribeToAnswer(): void {
+    if (this.answerSubscription) {
+      this.answerSubscription.unsubscribe();
+    }
+
+    console.log('[WebRTC] 订阅 Answer...');
+    this.answerSubscription = subscribeToAnswer(this.roomId, async (answer) => {
+      if (this.answerReceived) return;
+      this.answerReceived = true;
+      
+      console.log('[WebRTC] 收到 Answer，建立连接');
+      
+      try {
+        await this.peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log('[WebRTC] 已设置 remoteDescription');
+        await this.flushPendingCandidates();
+        
+        console.log('[WebRTC] 获取已有的 ICE 候选...');
+        const candidates = await getIceCandidates(this.roomId, this.peerId);
+        console.log('[WebRTC] 已有 ICE 候选数量:', candidates.length);
+        for (const candidate of candidates) {
+          await this.addIceCandidateSafe(candidate);
+        }
+      } catch (e) {
+        console.error('[WebRTC] 设置 Answer 失败:', e);
+      }
+    });
+  }
+
+  private subscribeToIce(): void {
+    if (this.iceSubscription) {
+      this.iceSubscription.unsubscribe();
+    }
+
+    this.iceSubscription = subscribeToIceCandidates(
+      this.roomId,
+      this.peerId,
+      async (candidate) => {
+        await this.addIceCandidateSafe(candidate);
+      }
+    );
   }
 
   private async createOffer(): Promise<void> {
@@ -322,43 +348,6 @@ export class WebRTCManager {
     });
   }
 
-  private async waitForAnswer(waitId: number): Promise<void> {
-    const maxAttempts = 60;
-    const interval = 1000;
-
-    for (let i = 0; i < maxAttempts; i++) {
-      if (waitId !== this.waitAnswerId) {
-        console.log('[WebRTC] 等待被取消（新的 offer 已创建）');
-        return;
-      }
-      
-      const answer = await getAnswer(this.roomId);
-      if (answer) {
-        await this.peerConnection?.setRemoteDescription(new RTCSessionDescription(answer));
-        await this.flushPendingCandidates();
-        
-        const candidates = await getIceCandidates(this.roomId, this.peerId);
-        for (const candidate of candidates) {
-          await this.addIceCandidateSafe(candidate);
-        }
-        return;
-      }
-      await new Promise(resolve => setTimeout(resolve, interval));
-    }
-
-    throw new Error('等待对方连接超时');
-  }
-
-  private async waitForAnswerInBackground(waitId: number): Promise<void> {
-    console.log('[WebRTC] 开始后台等待对方加入...');
-    try {
-      await this.waitForAnswer(waitId);
-      console.log('[WebRTC] 对方已加入，P2P 连接建立');
-    } catch (e) {
-      console.log('[WebRTC] 等待对方超时，继续等待中...');
-    }
-  }
-
   async joinRoom(
     roomId: string,
     peerId: string
@@ -387,23 +376,14 @@ export class WebRTCManager {
         return { success: false, error: '房间信令数据不存在' };
       }
 
+      console.log('[WebRTC] 客机收到 Offer，创建 Answer...');
       await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
       await this.flushPendingCandidates();
 
-      const existingCandidates = await getIceCandidates(roomId, this.peerId);
-      for (const candidate of existingCandidates) {
-        await this.addIceCandidateSafe(candidate);
-      }
-
       await this.createAnswer();
+      console.log('[WebRTC] 客机已保存 Answer');
 
-      this.signalingSubscription = subscribeToSignaling(
-        this.roomId,
-        this.peerId,
-        async (candidate) => {
-          await this.addIceCandidateSafe(candidate);
-        }
-      );
+      this.subscribeToIce();
 
       return { success: true };
     } catch (error) {
@@ -479,9 +459,14 @@ export class WebRTCManager {
   }
 
   async disconnect(): Promise<void> {
-    if (this.signalingSubscription) {
-      this.signalingSubscription.unsubscribe();
-      this.signalingSubscription = null;
+    if (this.answerSubscription) {
+      this.answerSubscription.unsubscribe();
+      this.answerSubscription = null;
+    }
+
+    if (this.iceSubscription) {
+      this.iceSubscription.unsubscribe();
+      this.iceSubscription = null;
     }
 
     if (this.dataChannel) {
@@ -504,6 +489,7 @@ export class WebRTCManager {
     this.reconnectAttempts = 0;
     this.isReconnecting = false;
     this.pendingCandidates = [];
+    this.answerReceived = false;
     
     this.updateStatus('disconnected');
   }

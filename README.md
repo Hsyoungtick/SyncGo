@@ -43,7 +43,10 @@
 # 安装依赖
 npm install
 
-# 启动开发服务器（前端 + 本地信令服务器）
+# 创建 .env 文件（参考 .env.example）
+cp .env.example .env
+
+# 启动开发服务器
 npm run dev
 ```
 
@@ -55,6 +58,28 @@ npm run dev
 npm run build
 ```
 
+## 项目结构
+
+```
+SyncGo/
+├── App.tsx              # 主应用组件
+├── components/
+│   ├── Goban.tsx        # 棋盘组件
+│   └── LeftPanel.tsx    # 左侧面板组件
+├── hooks/
+│   └── useNetwork.ts    # 网络对战 Hook
+├── lib/
+│   ├── signaling.ts     # 信令服务器 API 客户端
+│   └── webrtc.ts        # WebRTC 连接管理
+├── supabase/            # Supabase Edge Functions 信令服务器
+├── utils/
+│   └── gameLogic.ts     # 游戏逻辑
+├── public/
+│   └── favicon.svg      # 网站图标
+├── types.ts             # TypeScript 类型定义
+├── constants.ts         # 常量配置
+└── .env.example         # 环境变量示例
+```
 
 ## 部署方案
 
@@ -113,44 +138,19 @@ npx supabase secrets set SUPABASE_ANON_KEY=your-anon-key
 
 之后每次推送到 GitHub，Cloudflare 会自动重新部署。
 
-## 项目结构
-
-```
-SyncGo/
-├── App.tsx              # 主应用组件
-├── components/
-│   ├── Goban.tsx        # 棋盘组件
-│   └── LeftPanel.tsx    # 左侧面板组件
-├── hooks/
-│   └── useNetwork.ts    # 网络对战 Hook
-├── lib/
-│   ├── signaling.ts     # 信令服务器 API 客户端
-│   └── webrtc.ts        # WebRTC 连接管理
-├── server/              # 本地开发信令服务器（Express + SQLite）
-├── supabase/            # Supabase Edge Functions 信令服务器
-├── data/                # 本地数据库文件
-├── utils/
-│   └── gameLogic.ts     # 游戏逻辑
-├── public/
-│   └── favicon.svg      # 网站图标
-├── types.ts             # TypeScript 类型定义
-├── constants.ts         # 常量配置
-└── .env.example         # 环境变量示例
-```
-
 ## 架构说明
 
 ```
-┌─────────────┐                     ┌─────────────┐
+┌─────────────┐                    ┌─────────────┐
 │   Player A  │◄──── WebRTC P2P ───►│   Player B  │
-└──────┬──────┘                     └──────┬──────┘
-       │                                   │
-       │ Supabase Realtime（房间状态）      │
-       │ HTTP（SDP/ICE 交换）               │
-       ▼                                   ▼
+└──────┬──────┘                    └──────┬──────┘
+       │                                  │
+       │ Supabase Realtime（房间状态）    │
+       │ HTTP（SDP/ICE 交换）            │
+       ▼                                  ▼
 ┌─────────────────────────────────────────────────┐
-│              Supabase Edge Functions            │
-│         信令服务器 + Realtime 推送                │
+│              Supabase Edge Functions             │
+│         信令服务器 + Realtime 推送               │
 └─────────────────────────────────────────────────┘
 ```
 

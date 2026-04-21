@@ -12,7 +12,7 @@ import {
   updateRoomStatus,
   subscribeToRoom,
   subscribeToRoomList,
-  getOffer,
+  subscribeToOffer,
   takeOverAsHost,
   sendHeartbeat,
   leaveRoomApi,
@@ -125,8 +125,7 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
   const gameStateRef = useRef<GameState | null>(null);
   const netRoleRef = useRef(netRole);
   netRoleRef.current = netRole;
-  const reconnectCheckRef = useRef<NodeJS.Timeout | null>(null);
-  const lastOfferRef = useRef<string | null>(null);
+  const offerSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const roomIdRef = useRef(roomId);
   roomIdRef.current = roomId;
   const userIdRef = useRef(userId);
@@ -247,9 +246,9 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
           setOpponentDisconnected(false);
           hasConnectedRef.current = true;
           isReconnectingRef.current = false;
-          if (reconnectCheckRef.current) {
-            clearInterval(reconnectCheckRef.current);
-            reconnectCheckRef.current = null;
+          if (offerSubscriptionRef.current) {
+            offerSubscriptionRef.current.unsubscribe();
+            offerSubscriptionRef.current = null;
           }
           break;
         case 'connecting':
@@ -281,37 +280,24 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
                   console.log('[Guest→Host] 已创建 offer，等待新 Guest');
                 }
               } else {
-                console.log('[Guest] 接管失败，等待 Host 的新 offer');
+                console.log('[Guest] 接管失败，订阅新 offer...');
                 
-                if (reconnectCheckRef.current) {
-                  clearInterval(reconnectCheckRef.current);
+                if (offerSubscriptionRef.current) {
+                  offerSubscriptionRef.current.unsubscribe();
                 }
                 
-                lastOfferRef.current = null;
-                
-                reconnectCheckRef.current = setInterval(async () => {
-                  try {
-                    const offer = await getOffer(roomIdRef.current!);
-                    if (offer) {
-                      const offerStr = JSON.stringify(offer);
-                      if (lastOfferRef.current && offerStr !== lastOfferRef.current) {
-                        console.log('[Guest] 检测到新 offer，重连');
-                        clearInterval(reconnectCheckRef.current!);
-                        reconnectCheckRef.current = null;
-                        
-                        const result = await webrtcManager.joinRoom(roomIdRef.current!, userIdRef.current);
-                        if (result.success) {
-                          setOpponentDisconnected(false);
-                          setConnStatus('CONNECTED');
-                          hasConnectedRef.current = true;
-                        }
-                      }
-                      lastOfferRef.current = offerStr;
-                    }
-                  } catch (e) {
-                    console.error('[Guest] 检查 offer 失败:', e);
+                offerSubscriptionRef.current = subscribeToOffer(roomIdRef.current, async (offer) => {
+                  console.log('[Guest] 收到新 offer，重连');
+                  offerSubscriptionRef.current?.unsubscribe();
+                  offerSubscriptionRef.current = null;
+                  
+                  const result = await webrtcManager.joinRoom(roomIdRef.current!, userIdRef.current);
+                  if (result.success) {
+                    setOpponentDisconnected(false);
+                    setConnStatus('CONNECTED');
+                    hasConnectedRef.current = true;
                   }
-                }, 500);
+                });
               }
             } else if (netRoleRef.current === NetworkRole.Host && roomIdRef.current && !isReconnectingRef.current) {
               isReconnectingRef.current = true;
@@ -334,8 +320,8 @@ export function useNetwork(callbacks: NetworkCallbacks): [NetworkState, NetworkA
 
     return () => {
       webrtcManager.disconnect();
-      if (reconnectCheckRef.current) {
-        clearInterval(reconnectCheckRef.current);
+      if (offerSubscriptionRef.current) {
+        offerSubscriptionRef.current.unsubscribe();
       }
     };
   }, []);

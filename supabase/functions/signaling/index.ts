@@ -264,28 +264,25 @@ Deno.serve(async (req: Request) => {
     if (sigMatch) {
       if (req.method === 'POST') {
         const body = await req.json() as { peerId: string; candidate: unknown };
-        await dbFetch('signaling', {
+        await dbFetch('ice_candidates', {
           method: 'POST',
           body: {
             room_id: sigMatch[1],
             peer_id: body.peerId,
-            type: 'ice-candidate',
-            data: JSON.stringify(body.candidate),
+            candidate: body.candidate,
           },
         });
         return json({ success: true });
       }
       if (req.method === 'GET') {
         const excludePeerId = url.searchParams.get('excludePeerId');
-        let q = `?room_id=eq.${sigMatch[1]}&type=eq.ice-candidate&order=created_at.asc`;
+        let q = `?room_id=eq.${sigMatch[1]}&order=created_at.asc`;
         if (excludePeerId) q += `&peer_id=neq.${excludePeerId}`;
-        const results = await dbFetch('signaling', { query: q });
-        return json((results || []).map((r: any) => {
-          try { return JSON.parse(r.data); } catch { return null; }
-        }).filter(Boolean));
+        const results = await dbFetch('ice_candidates', { query: q });
+        return json((results || []).map((r: any) => r.candidate).filter(Boolean));
       }
       if (req.method === 'DELETE') {
-        await dbFetch('signaling', { method: 'DELETE', query: `?room_id=eq.${sigMatch[1]}` });
+        await dbFetch('ice_candidates', { method: 'DELETE', query: `?room_id=eq.${sigMatch[1]}` });
         return json({ success: true });
       }
     }

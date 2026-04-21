@@ -97,21 +97,30 @@ export async function getRoomList(): Promise<RoomInfo[]> {
 export function subscribeToRoomList(
   callback: (rooms: RoomInfo[]) => void
 ): { unsubscribe: () => void } {
+  console.log('[Realtime] subscribeToRoomList 调用, supabase:', !!supabase);
+  
   if (supabase) {
+    console.log('[Realtime] 房间列表使用 Realtime 订阅');
     const channel = supabase
       .channel('room-list')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rooms' },
-        () => getRoomList().then(callback)
+        (payload) => {
+          console.log('[Realtime] 房间列表变化:', payload);
+          getRoomList().then(callback);
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] 房间列表订阅状态:', status);
+      });
 
     getRoomList().then(callback);
 
     return { unsubscribe: () => supabase?.removeChannel(channel) };
   }
 
+  console.warn('[Realtime] 房间列表回退到轮询模式');
   let unsubscribed = false;
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;

@@ -1,33 +1,31 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const API_BASE = import.meta.env.VITE_SIGNALING_URL || '';
+const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || '';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// 从 Edge Functions URL 提取 Supabase 项目 URL
-// 例如: https://xxx.supabase.co/functions/v1/signaling -> https://xxx.supabase.co
+const isLocalDev = !SIGNALING_URL;
+
 function extractSupabaseUrl(url: string): string | null {
   const match = url.match(/^(https:\/\/[a-z]+\.supabase\.co)/);
   return match ? match[1] : null;
 }
 
-const SUPABASE_URL = extractSupabaseUrl(API_BASE);
-
 let supabase: SupabaseClient | null = null;
-if (SUPABASE_URL && SUPABASE_KEY) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
-      },
-    },
-  });
-  console.log('[Realtime] 已初始化, URL:', SUPABASE_URL);
+
+if (isLocalDev) {
+  console.log('[信令] 本地开发模式，使用代理');
 } else {
-  console.warn('[Realtime] 未启用 - URL:', !!SUPABASE_URL, 'Key:', !!SUPABASE_KEY);
+  const supabaseUrl = extractSupabaseUrl(SIGNALING_URL);
+  if (supabaseUrl && SUPABASE_KEY) {
+    supabase = createClient(supabaseUrl, SUPABASE_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } },
+    });
+    console.log('[Realtime] 已初始化, URL:', supabaseUrl);
+  }
 }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  const url = isLocalDev ? path : `${SIGNALING_URL}${path}`;
   
   const headers: Record<string, string> = { 
     'Content-Type': 'application/json',
@@ -39,23 +37,17 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
   }
   
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[信令] ${options?.method || 'GET'} ${path} 失败 (${response.status}):`, errorText);
-      throw new Error(`API 错误 ${response.status}: ${errorText}`);
-    }
-
-    return await response.json();
-  } catch (e) {
-    console.error(`[信令] ${options?.method || 'GET'} ${path} 网络错误:`, e);
-    throw e;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API 错误 ${response.status}: ${errorText}`);
   }
+
+  return await response.json();
 }
 
 export interface RoomInfo {
@@ -70,22 +62,15 @@ export interface RoomInfo {
   needsHost?: boolean;
 }
 
-const ROOM_EXPIRY_MS = 4 * 60 * 60 * 1000;
-
-export async function cleanupExpiredRooms(): Promise<void> {
-  // 由服务端自动处理
-}
-
 export async function createRoom(
   hostId: string,
   hostName: string,
   hostRole: 'black' | 'white'
 ): Promise<{ roomId: string }> {
-  const result = await api<{ roomId: string }>('/api/rooms', {
+  return api<{ roomId: string }>('/api/rooms', {
     method: 'POST',
     body: JSON.stringify({ hostId, hostName, hostRole }),
   });
-  return result;
 }
 
 export interface RoomRecord {
@@ -101,8 +86,7 @@ export interface RoomRecord {
 }
 
 export async function getRoom(roomId: string): Promise<RoomRecord | null> {
-  const result = await api<RoomRecord | null>(`/api/rooms/${roomId}`);
-  return result;
+  return api<RoomRecord | null>(`/api/rooms/${roomId}`);
 }
 
 export async function getRoomList(): Promise<RoomInfo[]> {
@@ -114,56 +98,29 @@ export function subscribeToRoomList(
   callback: (rooms: RoomInfo[]) => void
 ): { unsubscribe: () => void } {
   if (supabase) {
-    console.log('[Realtime] 房间列表使用 Realtime 订阅');
     const channel = supabase
       .channel('room-list')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'rooms',
-        },
-        () => {
-          console.log('[Realtime] 房间列表变化，刷新');
-          getRoomList().then(callback);
-        }
+        { event: '*', schema: 'public', table: 'rooms' },
+        () => getRoomList().then(callback)
       )
-      .subscribe((status) => {
-        console.log('[Realtime] 房间列表订阅状态:', status);
-      });
+      .subscribe();
 
     getRoomList().then(callback);
 
-    return {
-      unsubscribe: () => {
-        supabase?.removeChannel(channel);
-      },
-    };
+    return { unsubscribe: () => supabase?.removeChannel(channel) };
   }
 
-  console.warn('[Realtime] 房间列表回退到轮询模式');
   let unsubscribed = false;
-
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;
-
-    try {
-      const rooms = await getRoomList();
-      callback(rooms);
-    } catch (e) {
-      // 忽略轮询错误
-    }
+    try { callback(await getRoomList()); } catch {}
   }, 3000);
 
   getRoomList().then(callback);
 
-  return {
-    unsubscribe: () => {
-      unsubscribed = true;
-      clearInterval(pollInterval);
-    },
-  };
+  return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
 }
 
 export async function joinRoom(
@@ -171,14 +128,10 @@ export async function joinRoom(
   guestId: string,
   guestName: string
 ): Promise<{ success: boolean; room?: RoomRecord; error?: string }> {
-  const result = await api<{ success: boolean; room?: RoomRecord; error?: string }>(
-    `/api/rooms/${roomId}/join`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ guestId, guestName }),
-    }
-  );
-  return result;
+  return api(`/api/rooms/${roomId}/join`, {
+    method: 'PUT',
+    body: JSON.stringify({ guestId, guestName }),
+  });
 }
 
 export async function updateRoomStatus(
@@ -203,8 +156,7 @@ export async function saveOffer(roomId: string, offer: RTCSessionDescriptionInit
 }
 
 export async function getOffer(roomId: string): Promise<RTCSessionDescriptionInit | null> {
-  const result = await api<RTCSessionDescriptionInit | null>(`/api/rooms/${roomId}/offer`);
-  return result;
+  return api<RTCSessionDescriptionInit | null>(`/api/rooms/${roomId}/offer`);
 }
 
 export async function saveAnswer(roomId: string, answer: RTCSessionDescriptionInit): Promise<void> {
@@ -215,8 +167,7 @@ export async function saveAnswer(roomId: string, answer: RTCSessionDescriptionIn
 }
 
 export async function getAnswer(roomId: string): Promise<RTCSessionDescriptionInit | null> {
-  const result = await api<RTCSessionDescriptionInit | null>(`/api/rooms/${roomId}/answer`);
-  return result;
+  return api<RTCSessionDescriptionInit | null>(`/api/rooms/${roomId}/answer`);
 }
 
 export async function saveIceCandidate(
@@ -248,14 +199,10 @@ export async function takeOverAsHost(
   newHostId: string,
   newHostName: string
 ): Promise<{ success: boolean; error?: string }> {
-  const result = await api<{ success: boolean; error?: string }>(
-    `/api/rooms/${roomId}/takeover`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ newHostId, newHostName }),
-    }
-  );
-  return result;
+  return api(`/api/rooms/${roomId}/takeover`, {
+    method: 'PUT',
+    body: JSON.stringify({ newHostId, newHostName }),
+  });
 }
 
 export async function leaveRoomApi(
@@ -263,14 +210,10 @@ export async function leaveRoomApi(
   userId: string,
   userName: string
 ): Promise<{ success: boolean; hostTransferred?: boolean; newHostId?: string; error?: string }> {
-  const result = await api<{ success: boolean; hostTransferred?: boolean; newHostId?: string; error?: string }>(
-    `/api/rooms/${roomId}/leave`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ userId, userName }),
-    }
-  );
-  return result;
+  return api(`/api/rooms/${roomId}/leave`, {
+    method: 'PUT',
+    body: JSON.stringify({ userId, userName }),
+  });
 }
 
 export async function claimHost(
@@ -279,37 +222,26 @@ export async function claimHost(
   userName: string,
   hostRole: 'black' | 'white'
 ): Promise<{ success: boolean; error?: string }> {
-  const result = await api<{ success: boolean; error?: string }>(
-    `/api/rooms/${roomId}/claim-host`,
-    {
-      method: 'PUT',
-      body: JSON.stringify({ userId, userName, hostRole }),
-    }
-  );
-  return result;
+  return api(`/api/rooms/${roomId}/claim-host`, {
+    method: 'PUT',
+    body: JSON.stringify({ userId, userName, hostRole }),
+  });
 }
 
 export async function sendHeartbeat(roomId: string): Promise<void> {
   await api(`/api/rooms/${roomId}/heartbeat`, { method: 'PUT' });
 }
 
-// 使用 Supabase Realtime 订阅房间变化
 export function subscribeToRoom(
   roomId: string,
   callback: (room: RoomRecord | null) => void
 ): { unsubscribe: () => void } {
-  // 如果 Supabase 客户端可用，使用 Realtime
   if (supabase) {
     const channel = supabase
       .channel(`room:${roomId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'rooms',
-          filter: `room_id=eq.${roomId}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `room_id=eq.${roomId}` },
         (payload) => {
           const data = payload.new as any;
           callback({
@@ -325,39 +257,20 @@ export function subscribeToRoom(
       )
       .subscribe();
 
-    // 立即获取一次当前状态
     getRoom(roomId).then(callback);
 
-    return {
-      unsubscribe: () => {
-        supabase?.removeChannel(channel);
-      },
-    };
+    return { unsubscribe: () => supabase?.removeChannel(channel) };
   }
 
-  // 回退到轮询模式
   let unsubscribed = false;
-
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;
-
-    try {
-      const room = await getRoom(roomId);
-      callback(room);
-    } catch (e) {
-      // 忽略轮询错误
-    }
+    try { callback(await getRoom(roomId)); } catch {}
   }, 3000);
 
-  // 立即获取一次当前状态
   getRoom(roomId).then(callback);
 
-  return {
-    unsubscribe: () => {
-      unsubscribed = true;
-      clearInterval(pollInterval);
-    },
-  };
+  return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
 }
 
 export function subscribeToSignaling(
@@ -366,24 +279,13 @@ export function subscribeToSignaling(
   callback: (candidate: RTCIceCandidateInit) => void
 ): { unsubscribe: () => void } {
   let unsubscribed = false;
-
   const pollInterval = setInterval(async () => {
     if (unsubscribed) return;
-
     try {
       const candidates = await getIceCandidates(roomId, peerId);
-      for (const candidate of candidates) {
-        callback(candidate);
-      }
-    } catch (e) {
-      // 忽略轮询错误
-    }
+      for (const candidate of candidates) callback(candidate);
+    } catch {}
   }, 2000);
 
-  return {
-    unsubscribe: () => {
-      unsubscribed = true;
-      clearInterval(pollInterval);
-    },
-  };
+  return { unsubscribe: () => { unsubscribed = true; clearInterval(pollInterval); } };
 }

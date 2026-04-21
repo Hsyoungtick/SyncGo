@@ -17,6 +17,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local database
+data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -28,9 +31,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Cloudflare
-.wrangler/
-.dev.vars
+# Supabase
+supabase/.temp/
 
 # Trae IDE
 metadata.json

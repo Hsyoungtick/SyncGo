@@ -21,6 +21,9 @@ if (SUPABASE_URL && SUPABASE_KEY) {
       },
     },
   });
+  console.log('[Realtime] 已初始化, URL:', SUPABASE_URL);
+} else {
+  console.warn('[Realtime] 未启用 - URL:', !!SUPABASE_URL, 'Key:', !!SUPABASE_KEY);
 }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -111,6 +114,7 @@ export function subscribeToRoomList(
   callback: (rooms: RoomInfo[]) => void
 ): { unsubscribe: () => void } {
   if (supabase) {
+    console.log('[Realtime] 房间列表使用 Realtime 订阅');
     const channel = supabase
       .channel('room-list')
       .on(
@@ -121,10 +125,13 @@ export function subscribeToRoomList(
           table: 'rooms',
         },
         () => {
+          console.log('[Realtime] 房间列表变化，刷新');
           getRoomList().then(callback);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Realtime] 房间列表订阅状态:', status);
+      });
 
     getRoomList().then(callback);
 
@@ -135,6 +142,7 @@ export function subscribeToRoomList(
     };
   }
 
+  console.warn('[Realtime] 房间列表回退到轮询模式');
   let unsubscribed = false;
 
   const pollInterval = setInterval(async () => {
